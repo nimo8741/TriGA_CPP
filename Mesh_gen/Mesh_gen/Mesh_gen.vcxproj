@@ -31,6 +31,7 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <CLRSupport>true</CLRSupport>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -142,6 +143,7 @@
   <ItemGroup>
     <ClCompile Include="Meshfuncs.cpp" />
     <ClCompile Include="mesh_main.cpp" />
+    <ClCompile Include="Mesh_Part2_funcs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Meshfuncs.h" />

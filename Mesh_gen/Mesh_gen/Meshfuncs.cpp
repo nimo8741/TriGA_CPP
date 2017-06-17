@@ -46,6 +46,7 @@ contains the NURBS curve data
 Geom_data* nurb::readSpline(string filename)
 {
 	ifstream infile;
+	filename += ".spline";
 	infile.open(filename);
 	string line;
 
@@ -225,8 +226,6 @@ Geom_data* nurb::readSpline(string filename)
 					break;
 				}
 			}
-			string temp_num = line.substr(l, m);
-			int cur_side = stoi(temp_num);
 			l = l + m;
 
 			// Second number////////////////////////////////
@@ -248,13 +247,8 @@ Geom_data* nurb::readSpline(string filename)
 			temp_num = line.substr(l, m);
 			int cur_flag = stoi(temp_num);
 
-			// Combine both of these numbers into a small vector
-			vector<int> new_row;
-			new_row.push_back(cur_side);
-			new_row.push_back(cur_flag);
-
 			// Add this vector into the already created vector
-			current->B_flag.push_back(new_row);
+			current->B_flag.push_back(cur_flag);
 			
 			getline(infile, line);  // get the next line
 		}   // end of the Boundary flags while loop
@@ -436,211 +430,123 @@ polygons and another array describing the connectivity of the polygons
 void nurb::NURBS2poly(Geom_data * var)
 {
 	while (var != NULL) {
-		// First create the xi vector
-		int knot_len = var->KV.size();
-
-		var->xi.push_back(var->KV[0]);
-		for (int i = 0; i < knot_len; i++) {
-			if (var->KV[i] != var->xi.back()) {
-				var->xi.push_back(var->KV[i]);
-			}
-		}
-		// now add in the intermediate values
-		knot_len = var->xi.size();
-		for (int i = 0; i < knot_len - 1; i++) {
-			var->xi.insert(var->xi.begin()+(2*i +1), 0.5*(var->xi[2*i] + var->xi[2*i+1]));
-		}
-
-		Bezier_elem *head = extraction1D(var);
+		Bezier_handle *head = extraction1D(var);
 		Elem_list.push_back(head);
-		evalNURBS(var);
-		//curve_len(var);
+		// now I will update the KV within var to be the C(0) version
+		refine_Xi(var);
+
+		// now I need to evaluate the bezier element at p + 1 equispaced points
+		evalBez(var, head, -1);
+
+		// now determine the arc length of the curve
+		for (int i = 0; i < head->n_el; i++) {
+			curve_len(head, i);
+		}
+		// now loop through, dividing up the elements further so that they meet the threshold specifications.
+		double thresh = 1.01;      // one percent threshold for the difference between the two curve lengths
+		int iter = 1;
+		int max_it = 10;
+		while (iter <= max_it) {
+			bool need_split = false;
+			for (int i = 0; i < head->n_el; i++) {
+				if (head->elem_Geom[i].curve_len / head->elem_Geom[i].edge_len > thresh) {
+					need_split = true;
+
+					// now need to go through curve refinement on that one local element
+					// I can "cheat" on the refinement since when you subdivide an element you get two of the same element, only the control points and weights change
+					subdivide_element(head, i);
+					i++;    // so I don't subdivide the same element again
+
+				}
+			}
+
+			// determine if any splits occured
+			if (need_split == true)
+				iter++;
+			else   // if there weren't any, there is no point to continue looping
+				break;
+
+		}
+
 		var = var->next;
 	}
-
 
 }
 
 
-
 /**********************************************************************************
 Function prototype:
-void nurb::evalNURBS(Geom_data *var)
+void nurb::evalBez(Geom_data *var)
 
 Function description:
 This function evaluates a Bezier Element at 10 equispaced locations along the span
 0 to 1.
 
 Precondition:
-A pointer to the structure Geom_data had to be created and passed in
+A pointer to the structure Geom_data and Bezier element must be created and passed in
 
 Postcondition:
-This function updates the node field within the Geom_data with the physical 
-coordinate of each xi evaluation point
+This function updates various fields of the Bezier_elem struct
 
 **********************************************************************************/
 
-void nurb::evalNURBS(Geom_data * var)
-{
-	make_family(var->p_deg, var->NCP - 1, var->KV, var->xi);  // the reason there is the minus 1 is since the indexing begins at 0 instead of 1
+void nurb::evalBez(Geom_data * var, Bezier_handle *Bez, int elem)
+{	
+	// First I need to determine the knot vector for the element
+	int start, stop;
 
-	// now traverse the structure to evaluate each physical location which corresponds to each xi
-	vector<deBoor_fam *> curList = deBoor_tree.back();
-	int len = curList.size();
-	for (int i = 0; i < len; i++) {
-		vector<double> num(2, 0.0);   // there are two values here since there is both the x and y location
-		double denom = 0.0;           // this is just a single scalar
-		deBoor_fam *current = curList[i];
-		int count = 0;
-		while (current != NULL){
-			num[0] = num[0] + current->N * var->weight[count] * var->controlP[count][0];
-			num[1] = num[1] + current->N * var->weight[count] * var->controlP[count][1];
-			denom = denom + current->N * var->weight[count];
-			count++;
-			current = current->brother;
-		}
-		num[0] = num[0] / denom;   // I will reuse this variable to make it slightly simpler
-		num[1] = num[1] / denom;
-		var->node.push_back(num);
+	if (elem == -1){    // this means the elements need to be created
+	// now I need to evaluate all of the basis functions at p+1 points
+	eval_bern(Bez->p, Bez->p + 1,Bez);
+	// now I need to determine the IEN array for the bezier elements in the NURBS curves
+	IEN(var->NCP, var->p_deg, var->KV, Bez->n_el);
+
+	get_P_and_W(Bez, var);
+	
+	// now evaluate each physical location which corresponds to each xi
+		stop = Bez->n_el;
+		start = 0;
 	}
-}
-
-/**********************************************************************************
-Function prototype:
-void nurb::deBoor(int i, int p, double xi, vector<double> KV)
-
-Function description:
-This function evaluates a NURBS curve at the given knot locations and returns the
-cooresponding coodinates in 2D physical space
-
-Precondition:
-A pointer to the structure Geom_data had to be created and passed in
+	else {
+		stop = elem + 1;
+		start = elem;
+	}
 
 
-Postcondition:
-This function updates the node field within the Geom_data with the physical
-coordinate of each xi evaluation point
-
-**********************************************************************************/
-
-
-double nurb::deBoor(int i, int p, double xi, vector<double> KV)
-{
-
-
-	return 0.0;
-}
-
-
-/**********************************************************************************
-Function prototype:
-void nurb::make_family(int p)
-
-Function description:
-This function creates the deBoor tree so that it only need be traversed later.
-This is all in the aim to reduce computation time since basis function evaluation
-is the most called function within isogeometric analysis
-
-Precondition:
-int i needs to be passed in.  This is largest basis function index which could be asked for. 
-int p is the largest polynomial degree of the tree
-vector<double> Xi is the Knot vector for the NURBS curve
-vector<double> xi is the vector containing the basis function evaluation points
-
-
-Postcondition:
-This function creates the deBoor_fam data structure and returns is so that it can be
-used in later traversal.
-
-**********************************************************************************/
-
-void nurb::make_family(int p, int i, vector<double> Xi, vector<double> xi)
-{
-	int xi_size = xi.size();
-	vector<deBoor_fam *> headList;
-	for (int xi_cur = 0; xi_cur < xi_size; xi_cur++) {    // this loop goes through all of the evaluation points.   Each of these are on different trees
-		deBoor_fam *head_last = new deBoor_fam;
-		for (int p_cur = 0; p_cur <= p; p_cur++) {              // this loop starts at p = 0 and slowly goes up each level in the polynomial pyramid
-
-			bool completed = false;
-			int i_cur = 0;
-
-			deBoor_fam *head = new deBoor_fam;      // this is just the head of the current level
-			deBoor_fam *current = head;
-
-			while (completed == false) {      // this loop works in the same level of the pyramid, figuring out all of the values there. 
-										     // can't be for loop because the width is non contant, ie cause its a pyramid
-				if (p_cur != 0) {
-					head->daughter = head_last;
-					head_last->dad = head;
-					head->son = head->daughter->brother;
-				}
-
-				// special case if p_cur == 0
-				if (p_cur == 0) {
-					if (Xi[i_cur] <= xi[xi_cur] && xi[xi_cur] < Xi[i_cur + 1]) {
-						current->N = 1.0;
-					}
-					else {
-						current->N = 0.0;
-					}
-					// set all of the values within the struct that aren't suppose to be NULL
-					current->p = 0;
-					current->i = i_cur;
-
-				}
-
-				// general case,    this is just the Cox deBoor relation
-				else {
-					double N_left = (xi[xi_cur] - Xi[i_cur]) / (Xi[i_cur + p_cur] - Xi[i_cur])*current->daughter->N;
-					if (isnan(N_left)) {
-						N_left = 0.0;
-					}
-					double N_right = ((Xi[i_cur + p_cur + 1] - xi[xi_cur]) / (Xi[i_cur + p_cur + 1] - Xi[i_cur + 1]))*current->son->N;
-					if (isnan(N_right)) {
-						N_right = 0.0;
-					}
-					current->N = N_left + N_right;
-					current->daughter = current->son->sister;
-					current->daughter->dad = current;
-					current->i = i_cur;
-					current->p = p_cur;
-
-				}
-				// determine if the layer of the pyramid is completed and set the value of that basis function to 1 if xi is 1 as well
-				if (i_cur == (p - p_cur) + i) {
-					completed = true;
-					head_last = head;
-					if (xi[xi_cur] == 1.0) {
-						current->N = 1.0;
-					}
-
-				}
-				else {   // need to set up the next sibling
-					deBoor_fam *next_one = new deBoor_fam;
-					next_one->sister = current;
-					next_one->daughter = current->son;
-					current->brother = next_one;
-					next_one->mom = current->dad;
-					if (p_cur != 0) {
-						next_one->son = next_one->daughter->brother;
-					}
-					current = next_one;
-					i_cur = i_cur++;
-				}
+	for (int i = start; i < stop; i++) {      // loop through all of the elements
+		Bez->elem_Geom[i].edge_len = 0.0;
+		for (unsigned int j = 0; j < Bez->xi_evals.size(); j++) {      // loop through all of the xi quadrature points
+			vector <double> num(2, 0);
+			double denom = 0;
+			for (int k = 0; k < Bez->p + 1; k++) {            // Loop through all of the control points in that element.  There are p + 1 of them
+				num[0] += Bez->N[j][k] * Bez->elem_Geom[i].controlP[k][0] * Bez->elem_Geom[i].weight[k];    // First item is the evaluation of the bernstein polynomial, second is the control point location, third is the weight
+				num[1] += Bez->N[j][k] * Bez->elem_Geom[i].controlP[k][1] * Bez->elem_Geom[i].weight[k];
+				denom += Bez->N[j][k] * Bez->elem_Geom[i].weight[k];
 			}
+			num[0] = num[0] / denom;
+			num[1] = num[1] / denom;
+
+			vector<double> cur_point;
+			cur_point.push_back(num[0]);
+			cur_point.push_back(num[1]);
+			if (elem == -1)
+				Bez->elem_Geom[i].xi_real_loc.push_back(cur_point);     // push this point into the struct
+			else
+				Bez->elem_Geom[i].xi_real_loc[j] = cur_point;
+
+			// now update the edge length of the NURBS curve
+			if (j > 0) {
+				Bez->elem_Geom[i].edge_len += sqrt(pow(Bez->elem_Geom[i].xi_real_loc[j-1][0] - cur_point[0],2) + pow(Bez->elem_Geom[i].xi_real_loc[j - 1][1] - cur_point[1], 2));      // this is just doing sqrt(dx^2 + dy^2)
+			}
+
 		}
-		// now perform a push back on the vector containing the heads
-		headList.push_back(head_last);
 	}
-	// push this onto deBoor_tree
-	deBoor_tree.push_back(headList);
 }
 
 
 /**********************************************************************************
 Function prototype:
-void nurb::curve_len(Geom_data *var)
+void nurb::curve_len(Bezier_handle *Bez)
 
 Function description:
 This function computes the curve length between each adjacent xi value as well as the
@@ -648,7 +554,8 @@ linear edge length
 
 
 Precondition:
-Geom_data *var needs to be passed in.  This is the pointer to the main data struct
+Bezier_handle *Bez needs to be passed in.  It also needs the index of the element
+for which to evaluate the curve length
 
 
 Postcondition:
@@ -656,19 +563,63 @@ This function updates the curve length field within the struct
 
 **********************************************************************************/
 
-void nurb::curve_len(Geom_data * var)
+void nurb::curve_len(Bezier_handle *Bez, int i)
 {
-	vector<vector<int>> index = determine_xi_index(var); // now I know the indexes of var->xi which define the bounds of curves
-	for (unsigned int i = 0; i < var->node.size()-1; i++) {    // for the plate and hole, there are 9 xi values so there are 8 curves inbetween them.  that is why is go to size-1
+	int p = Bez->p;
+	Bez->elem_Geom[i].curve_len = 0.0;
+	int count = 0;
+	vector<double> last_point;
+	for (int count = 0; count <= (10 * p); count++) {     // this loops through all of the equispaced 10*(p + 1) evaluation points
+		double xi = (double) count / (10.0 * (double) p);
+		// initialize the numerator and denominator for evaluation
+		vector <double> num(2, 0);
+		double denom = 0;
+			for (int k = 1; k <= p + 1; k++) {           // this loops through all of the basis function
+			double N = (fast_fact[p] / (fast_fact[k - 1] * fast_fact[p - k + 1]))*pow(xi, (k - 1)) * pow((1 - xi), (p + 1 - k));
+			// the above line is the n choose k representation of Bernstein polynomials over the span [0,1]
+
+			num[0] += N * Bez->elem_Geom[i].controlP[k - 1][0] * Bez->elem_Geom[i].weight[k - 1];    // First item is the evaluation of the bernstein polynomial, second is the control point location, third is the weight
+			num[1] += N * Bez->elem_Geom[i].controlP[k - 1][1] * Bez->elem_Geom[i].weight[k - 1];
+			denom += N * Bez->elem_Geom[i].weight[k - 1];
+		}
+
+		num[0] = num[0] / denom;
+		num[1] = num[1] / denom;
+
+
+		if (count == 0) {
+			last_point = num;
+		}										// now update the edge length of the NURBS curve
+		else {
+			Bez->elem_Geom[i].curve_len += sqrt(pow(num[0] - last_point[0], 2) + pow(num[1] - last_point[1], 2));      // this is just doing sqrt(dx^2 + dy^2)
+			last_point = num;
+		}
 	}
 
 }
 
-
+/**********************************************************************************
+Function prototype:
 Bezier_elem * nurb::extraction1D(Geom_data *var)
+
+Function description:
+This function computes the extraction operators and number of Bezier Elements for
+a given NURBS curve
+
+
+Precondition:
+Geom_data *var needs to be passed in.  This is the pointer to the main data struct
+
+
+Postcondition:
+This function updates the extraction operators and number of elements field within
+the bezier element struct
+
+**********************************************************************************/
+Bezier_handle * nurb::extraction1D(Geom_data *var)
 {
 	// First initialize the bezier element struct
-	Bezier_elem *head = new Bezier_elem;
+	Bezier_handle *head = new Bezier_handle;
 	MatrixXd Operator;
 	Operator.resize(var->p_deg + 1, var->p_deg + 1);
 	Operator.setIdentity();
@@ -734,147 +685,363 @@ Bezier_elem * nurb::extraction1D(Geom_data *var)
 
 
 	head->n_el = n_el;
-
+	head->p = var->p_deg;
 	return head;
 }
 
 
 /**********************************************************************************
 Function prototype:
-vector<vector<int>> nurb::determine_xi_index(Geom_data *var)
+void nurb::fact_table()
 
 Function description:
-This function determines the indexes of the xi vector to which each arc is described by
+This function creates a table of common factorials, UP TO 15!
 
 
 Precondition:
-Geom_data *var needs to be passed in.  This is the pointer to the main data struct
-
+This function is called at the beginning of mesh_main.cpp and the data is saved for
+the remainder of the program's execution
 
 Postcondition:
-This function returns a 2D array containing the xi indexing information
-The first column of this array denotes the starting xi index and the second column
-denotes the ending index
-
-Each row is for each of the "smooth" bernstein polynomials
-what is meant by smooth is that there are no cusps present within it.
-If there is a cusp present within it, it is divided into pieces so there is no cusp
-
+This function saves the table within the protected fields of the class
 **********************************************************************************/
-std::vector<std::vector<int>> nurb::determine_xi_index(Geom_data * var)
+void nurb::fact_table()
 {
-	vector< vector<int> > index;
-	int i = 0;
-	bool done = false;
-	while (done == false){         // since the knot vector is normalized about 1, it will hit this eventually
-		if (var->xi[i] == 1)
-			done = true;
-
-		int i_end = i + var->p_deg + 1;
-		// now determine if there is a p times repetition on the inside of this span'
-		vector<vector<double>> saved;
-		for (int j = i + 1; j < i_end; j++) {
-			if (var->KV[j] != var->KV[i] && var->KV[j] != var->KV[i + var->p_deg + 1]) {
-				if (saved.size() == 0) {     // there is nothing in the array
-					vector<double> temp(2, 1);
-					temp[0] = var->KV[j];
-					saved.push_back(temp);
-				}
-				else if (var->KV[j] == saved.back()[0]) {    // I am at another repeat so increment the count
-					saved.back()[1]++;
-				}
-				else {       // I am at a new number so add a new row to the array
-					vector<double> temp(2, 1);
-					temp[0] = var->KV[j];
-					saved.push_back(temp);
-				}
-
-			}
-		}   // end of the saved array creation loop
-
-		vector<int> index_temp(3, 0);
-		// find where var->KV[i] exists within the var->xi vector  it is guarenteed to be in there by the way we made the xi vector
-		int j = 0;
-		while (true) {
-			if (var->KV[i] == var->xi[j])
-				break;
-			else
-				j++;
-		}
-		index_temp[0] = j;
-		index_temp[2] = i;     // the third column denotes the global basis function index
-
-		// now identify if there are any cases with cusps I need to deal with
-		if (saved.size() != 0) {
-			for (unsigned int k = 0; k < saved.size(); k++) {
-				if (saved[k][1] >= var->p_deg) {        // there is a cusp I need to deal with
-					int j = 0;
-					while (true) {
-						if (saved[k][0] == var->xi[j])
-							break;
-						else
-							j++;
-					}
-					index_temp[1] = j;      // this is the ending index within the xi vector
-					index.push_back(index_temp);
-					// now do the next one
-					// now deal with getting the starting index beacuse it is a cusp, it is the same as the ending index of the last one
-					index_temp[0] = j;
-					index_temp[2] = i;
-					//now find the ending index of this next segment   because of the fact that there are p+1 repetative knots... if j = 2 and the corresponding location in KV is 0.25 and the next
-					// non repeated number is 0.5, index_temp[1] should be what ever the index in xi is 0.5
-
-					int m = 0;
-					while (true) {
-						if (saved[k][0] == var->xi[m])
-							break;
-						else
-							m++;
-					}
-					// m is now the index of the first occurance of the repeated knots
-					int temp = static_cast<int>(saved[k][1]);    // typecast to get rid of the warnings
-					m = m + temp - 1;
-					m += var->p_deg;      // now I have the index of the "0.5" as mentioned above
-
-					// find this number in the xi vector
-					int n = 0;
-					while (true) {
-						if (var->KV[m] == var->xi[n])
-							break;
-						else
-							n++;
-					}
-
-					index_temp[1] = n;
-					index.push_back(index_temp);
-
-					// I am "hard coding these two interations because there is the before cusp and post cusp segments.
-				}
-			}
-		}
-		else {
-			// find what it would have been otherwise
-			int j = 0;
-			while (true) {
-				if (var->KV[i_end] == var->xi[j])
-					break;
-				else
-					j++;
-			}
-			index_temp[1] = j;
-			index.push_back(index_temp);
-			// initialize the next one
-			vector<int> index_temp(2, 0);
-		}
-
-
-		i++;
-
+	double total = 1;
+	fast_fact.push_back(total); // this is 0!
+	for (double i = 1; i <= 15; i++) {
+		total *= i;
+		fast_fact.push_back(total);
 	}
-	return index;
 }
 
 
+/**********************************************************************************
+Function prototype:
+void nurb::eval_bern(int p, int n, Bezier_elem *Bez)
 
+Function description:
+This function evaluates the bernstein basis functions at a set of equispaced
+quadrature points.  There are p+1 of these quadrature points
+
+
+Precondition:
+This function requires the polynomial degree of the element (p), the number of
+basis functions in the element (n), and a point to its parent Bezier_elem struct
+
+Postcondition:
+This function updates the bezier_value struct within the parent Bezier_elem
+**********************************************************************************/
+
+void nurb::eval_bern(int p, int n, Bezier_handle *Bez)
+{
+	vector <double> xi_list;
+	
+	for (int count = 0; count <= 2; count ++) {     // this loops through all of the equispaced p + 1 evaluation points
+		double xi = (double) count / 2.0;            // this is so it evaluates at the beginning middle and end
+		xi_list.push_back(xi);
+		vector <double> same_xi;
+		for (int i = 1; i <= p + 1; i++) {           // this loops through all of the basis function
+			double N = (fast_fact[p] / (fast_fact[i - 1] * fast_fact[p - i + 1]))*pow(xi, (i - 1)) * pow((1 - xi), (p + 1 - i));
+			// the above line is the n choose k representation of Bernstein polynomials over the span [0,1]
+			same_xi.push_back(N);
+		}
+		Bez->N.push_back(same_xi);
+	}
+	Bez->xi_evals = xi_list;
+}
+
+/**********************************************************************************
+Function prototype:
+void nurb::get_P_and_W(Bezier_elem *Bez, Geom_data *var)
+
+Function description:
+This function determines the control points and weights which are associated with
+each bezier element
+
+
+Precondition:
+This function requires a pointer to the Geom_data struct, which houses the original
+geometric data, as well as a pointer to the current Bezier Element, Bez.
+
+Postcondition:
+This function updates the bezier_value struct within the parent Bezier_elem and 
+return a boolean.  If true, it means that the program had to create all of the data
+like it would for the first time this function is called.  If it is false, it means
+that the function didn't do anything since there is already data.
+**********************************************************************************/
+
+void nurb::get_P_and_W(Bezier_handle * Bez, Geom_data *var)
+{
+	// First pull off the current IEN array
+	vector < vector < int>> IEN = Master_IEN.back();
+
+	// Next construct the projected control points into the matrix data type
+	for (int i = 0; i < Bez->n_el; i++) {
+		// I need to make a seperate matrix for the X Y and Z coordinate.
+		MatrixXd proj;   // first column is x, second column is y, third is z (weight)
+		proj.resize(Bez->p + 1, 3);
+
+		// Assemble the matrix
+		for (int j = 0; j <= Bez->p; j++) {
+			for (int k = 0; k < 3; k++) {
+				if (k != 2) {
+					proj(j, k) = var->controlP[IEN[i][j]][k];
+				}
+				else {
+					proj(j, k) = var->weight[IEN[i][j]];
+				}
+			}
+		}
+		// now need to multiply this vector by the transpose of the extraction operator
+		MatrixXd Bez_points;
+		Bez_points.resize(Bez->p + 1, 3);
+		Bez_points = Bez->Operator[i].transpose()*proj;
+
+		Bez_points.transposeInPlace();     // this is so it is essentially in row major order instead of column major
+
+		// Now I extract the x,y, and weight data and store it appropriately
+		Bezier_elem proj_data;
+		double temp;
+		for (int j = 0; j < Bez_points.cols(); j++) {
+			vector<double> cur_point;
+			for (int k = 0; k < 3; k++) {
+				temp = *(Bez_points.data() + (k + (j * 3)));    // get the value from that cell in the matrix
+
+				if (k != 2) {   // if it is supposed to be either the x or y coordinate
+					cur_point.push_back(temp);
+				}
+				else
+					proj_data.weight.push_back(temp);
+			}
+			proj_data.controlP.push_back(cur_point);
+			proj_data.side = i;
+		}
+		Bez->elem_Geom.push_back(proj_data);  // push all of this data onto the vector
+	}
+}
+
+/**********************************************************************************
+Function prototype:
+void nurb::IEN(int n; int p; vector<double> Xi)
+
+Function description:
+This function computes the IEN which describes the local to global connectivity
+of the Bezier control points/basis functions.
+
+
+Precondition:
+This function requires the number of basis functions in the C(0) NURBS curve,
+the degree for this same NURBS curve, and its C(0) Knot vector
+
+Postcondition:
+This function updates the Master_IEN protected data variable
+**********************************************************************************/
+
+void nurb::IEN(int n, int p, vector<double> Xi, int n_el)
+{
+	// this will make the transpose of the Matlab version of this code.  The reason this is done is because c++ has row order to it while Matlab has column order
+	// the numbers within the IEN array denote the index of the basis function, therefore, it will start at 0 instead of 1
+	vector <vector<int>> IEN(n_el);
+	int l = p + 1;
+	int e = 0;
+	while (l <= n) {
+		for (int a = 0; a < p + 1; a++) {
+			IEN[e].push_back((l + a) - (p + 1));
+		}
+		l++;
+		while (Xi[l] == Xi[l - 1] && (l < n)) {
+			l++;
+		}
+		if (l <= n)
+			e++;
+	}
+	// now combine into the master array with stores the IEN Arrays for each of the NURBS curves
+	Master_IEN.push_back(IEN);
+}
+
+/**********************************************************************************
+Function prototype:
+void nurb::subdivide_element(Bezier_handle *Bez, int e_index)
+
+Function description:
+This function divides the given element in half, creates is corresponding Extraction
+Operator from the original NURBS curve and updates all appropriate data field within
+the Bezier_handler struct
+
+
+Precondition:
+This function requires a pointer to the Bezier_handler struct as well as an index 
+corresponding to the element which is to be subdivided
+
+Postcondition:
+This function updates the Bezier_handler *Bez
+**********************************************************************************/
+
+void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
+{
+	// first create the knot vector
+	vector<double> Xi;
+	for (int i = 0; i < Bez->p + 1; i++)
+		Xi.push_back(0.0);
+	for (int i = 0; i < Bez->p + 1; i++)
+		Xi.push_back(1.0);
+	// now perform a curve refine to get the control points and weights for the refined version
+	for (int added_points = 0; added_points < Bez->p; added_points++) {  // loop through all of the points that need to be added
+		// first determine the length variable m
+
+		int m = Bez->elem_Geom[e_index].controlP.size() + 1;    // m is the number of control points after I add one the new one
+		int k = Bez->p + 1;      // this is the location of the added point
+		vector<vector<double>> Q(m, vector<double>(2, 0.0));
+		vector<double> W(m, 0);
+		for (int j = 1; j <= m; j++) {
+			if (j == 1) {
+				Q[j - 1][0] = Bez->elem_Geom[e_index].controlP[0][0] * Bez->elem_Geom[e_index].weight[j - 1];     // I am multiplying by the weights to project the curve
+				Q[j - 1][1] = Bez->elem_Geom[e_index].controlP[0][1] * Bez->elem_Geom[e_index].weight[j - 1];
+				W[j - 1] = Bez->elem_Geom[e_index].weight[m - 2];
+
+			}
+			else if (j == m) {
+				Q[j - 1][0] = Bez->elem_Geom[e_index].controlP[m - 2][0] * Bez->elem_Geom[e_index].weight[m - 2];
+				Q[j - 1][1] = Bez->elem_Geom[e_index].controlP[m - 2][1] * Bez->elem_Geom[e_index].weight[m - 2];
+				W[j - 1] = Bez->elem_Geom[e_index].weight[m - 2];
+
+			}
+			else{
+				double alpha;
+				if (j >= 1 && j <= k - Bez->p) {
+					alpha = 1.0;
+				}
+				else if (j >= k - Bez->p + 1 && j <= k) {
+					alpha = (0.5 - Xi[j - 1]) / (Xi[j + Bez->p - 1] - Xi[j - 1]);
+				}
+				else
+					alpha = 0.0;
+				// now save the values of the data points and project them
+				double point11 = Bez->elem_Geom[e_index].controlP[j - 1][0] * Bez->elem_Geom[e_index].weight[j - 1];   //11 = current j index, x or y (x = 0, y = 1) 
+				double point12 = Bez->elem_Geom[e_index].controlP[j - 1][1] * Bez->elem_Geom[e_index].weight[j - 1];
+				double point21 = Bez->elem_Geom[e_index].controlP[j - 2][0] * Bez->elem_Geom[e_index].weight[j - 2];
+				double point22 = Bez->elem_Geom[e_index].controlP[j - 2][1] * Bez->elem_Geom[e_index].weight[j - 2];
+
+				Q[j - 1][0] = alpha*point11 + (1 - alpha)*point21;
+				Q[j - 1][1] = alpha*point12 + (1 - alpha)*point22;
+				W[j - 1] = alpha*Bez->elem_Geom[e_index].weight[j - 1] + (1 - alpha)*Bez->elem_Geom[e_index].weight[j - 2];
+
+			}
+			// now come back from projected space
+
+			Q[j - 1][0] = Q[j - 1][0] / W[j - 1];
+			Q[j - 1][1] = Q[j - 1][1] / W[j - 1];
+
+		}
+
+
+
+		Bez->elem_Geom[e_index].controlP = Q;
+		Bez->elem_Geom[e_index].weight = W;
+		Xi.insert(Xi.begin() + Bez->p + 1, 0.5);
+
+	}
+
+	// now I need to seperate the 1 element into 2
+	// the knot vector has C(0) continuity at this point so I don't have to do a full extraction
+	// also, therefore the extraction operator between the 2 element version and the one element is
+	// the identity matrix when multiplying the old and new Extraction operators together to obtain a 
+	// NURBS to refined element operator, you would be multiplying the other matrix by the identity matrix
+	// therefore, that step is largely ignored.
+
+	Bez->n_el++;
+
+
+	// so simply make a copy of the previous Operator
+	Bez->Operator.insert(Bez->Operator.begin() + e_index, Bez->Operator[e_index]);
+	Bezier_elem inserted = Bez->elem_Geom[e_index];      // first just copy the element to be divided
+	Bez->elem_Geom.insert(Bez->elem_Geom.begin() + e_index, inserted);    // this makes the inserted element come before the one that was determined to be repeated
+
+	// Now Update the master IEN array so it reflects the added control points.
+	vector<int> insert(Bez->p + 1, 0);  // this is the entry corresponding to the inserted point
+	vector<vector<int>> cur_IEN = Master_IEN.back();
+	insert[0] = cur_IEN[e_index][Bez->p];
+	for (int i = 1; i < Bez->p + 1; i++) {
+		insert[i] = insert[i - 1] + 1;
+	}
+	cur_IEN.insert(cur_IEN.begin() + e_index + 1, insert);
+
+
+	for (int i = e_index + 2; i < Bez->n_el; i++) {
+		for (int j = 0; j < Bez->p + 1; j++) {
+			cur_IEN[i][j] += Bez->p;
+		}
+
+	}
+	Master_IEN.back() = cur_IEN;
+
+	// now update the weights and control points on the new one
+	// for this element, I will just pop the last p elements off the back
+	for (int i = 0; i < Bez->p; i++) {
+		Bez->elem_Geom[e_index].controlP.pop_back();
+		Bez->elem_Geom[e_index].weight.pop_back();
+	}
+
+	// now update the weights and control points for the old one.
+	// this will contain control points that occur later.
+	// this will remove the elements from the front
+	for (int i = 0; i < Bez->p; i++) {
+		Bez->elem_Geom[e_index + 1].controlP.erase(Bez->elem_Geom[e_index + 1].controlP.begin());
+		Bez->elem_Geom[e_index + 1].weight.erase(Bez->elem_Geom[e_index + 1].weight.begin());
+	}
+
+
+	// now I need to find the curve and edge lengths of these new elements
+	Geom_data *garbage = new Geom_data;    // just need one of these so it will be happy
+	evalBez(garbage, Bez, e_index);
+	evalBez(garbage, Bez, e_index + 1);
+	curve_len(Bez, e_index);
+	curve_len(Bez, e_index + 1);
+}
+
+
+/**********************************************************************************
+Function prototype:
+void nurb::refine_Xi(Geom_data *var)
+
+Function description:
+This function alters the knot vector within var so that it exihibits C(0)
+continuity
+
+
+Precondition:
+This function only requires a valid pointer to Geom_data struct in order to perform
+
+Postcondition:
+This function updates var->KV
+**********************************************************************************/
+
+void nurb::refine_Xi(Geom_data * var)
+{
+	vector<double> Xi = var->KV;
+	unsigned int i = 0;
+	while (Xi[i] == Xi[0]) {
+		i++;
+	}
+	while (true) {
+		int start = i;
+		// loop through to find the end of this same reoccuring number
+		while (Xi[i] == Xi[start] && i < Xi.size() - 1) {
+			i++;
+		}
+		unsigned int amount_cur = i - start;
+		unsigned int need = var->p_deg - amount_cur;
+		if (i == Xi.size() - 1) {
+			var->KV = Xi;
+			return;
+		}
+		else {
+			vector <double> insert_num(need, Xi[start]);
+			Xi.insert(Xi.begin() + start, insert_num.begin(),insert_num.end());
+			i += need;
+		}
+	}
+}
 
 
