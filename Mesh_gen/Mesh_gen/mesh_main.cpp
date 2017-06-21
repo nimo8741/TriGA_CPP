@@ -20,6 +20,10 @@ int main(int argc, char*argv[]) {
 	// Part 2 Making the Linear Mesh
 	action->create_geo_file(argv[1]);
 	action->call_gmsh(argv[1]);
+	action->readMsh(argv[1]);
+
+	// Part 3 Smoothing and Degree Elevating the mesh
+	action->smoothMesh();
 
 	
 	return 0;

@@ -1,7 +1,6 @@
 #ifndef MESHFUNCS_H
 #define MESHFUNCS_H
 #include <vector>
-#pragma warning(disable: 4793) // methods are compiled as native (clr warning)
 #include <Eigen/Dense>
 
 struct Geom_data {
@@ -37,36 +36,46 @@ struct Bezier_handle {
 	std::vector <std::vector <double>> N;                 // this is the value of the evaluate basis function each row is a different evaluation point and each col is a new basis function index
 	std::vector <double> xi_evals;           // this is the vector of xi evaluation points
 	std::vector<Bezier_elem> elem_Geom;     // this is a vector which contains all of the data for the control points and weights
+};
 
+struct Tri_elem {
+	std::vector<std::vector<double>> controlP;    // this is a 2D array containing the x and y location of each of the 10 control points.
+	std::vector<int> global_side;    // this contains the global index for each of the three sides of the triangle.  They are not unique to each element as almost all sides are shared
+	                                 // this index corresponds to the index in the global_edges variable
 	
 };
+
+
 
 class nurb{
 	public:
 		nurb();
 		//~nurb();   // this is the deconstructer I think but I'm not sure if I'll need it
 
-		// Part 1 reading in, extracting, and refining the NURBS curves
+		// Part 1: reading in, extracting, and refining the NURBS curves
 		Geom_data* readSpline(std::string filename);
 		void rearrange(Geom_data *var, int array, int B_rows);
 		bool hasnumber(std::string line);
 		void NURBS2poly(Geom_data *var);
-		void evalBez(Geom_data *var, Bezier_handle * Bez, int elem);
+		void evalBez(Geom_data *var, Bezier_handle * Bez, int elem, std::vector<double> KV_old);
 		Geom_data *head_nurb;                               // this is the head of the linked list of the structs that contain the nurb data
 		void curve_len(Bezier_handle *Bez, int i);
 		Bezier_handle * extraction1D(Geom_data *var);
 		void fact_table();
 		void eval_bern(int p, int n, Bezier_handle *Bez);
-		void get_P_and_W(Bezier_handle *Bez, Geom_data *var);
-		void IEN(int n, int p, std::vector<double> Xi,int n_el);
+		void get_P_and_W(Bezier_handle *Bez, Geom_data *var, std::vector<double> KV_old);
+		std::vector<std::vector<int>> IEN(int n, int p, std::vector<double> Xi,int n_el);
 		void subdivide_element(Bezier_handle *Bez, int e_index);
 
 
 
-		// Part 2 making triangles
+		// Part 2: Making the linear mesh and reading the result back into this program
 		void create_geo_file(std::string filename);
 		void call_gmsh(std::string filename);
+		void readMsh(std::string filename);
 
+		// Part 3: Smoothing and degree elevating the linear mesh
+		void smoothMesh();
 
 
 	protected:
@@ -79,8 +88,18 @@ class nurb{
 		std::vector <std::vector< std::vector<int>>> Master_IEN;
 
 
+		std::vector <Tri_elem *> triangles;      // this is a list of all of the triangular elements in the mesh
+		std::vector<std::vector <int>> global_edges; 
+		// the first column of the above field denotes the index of the first node in the side, 
+		// the second is the second node for the side, and the third is the physical group
+	    // to which that edge belongs to.  By physical side, it is meant which boundary condition group it belongs to.
+		std::vector<std::vector <double>> node_list;
+
+
+
+
+
 	private:
-		//std::vector< std::vector<int> > determine_xi_index(Geom_data *var);
 		void refine_Xi(Geom_data *var);
 
 

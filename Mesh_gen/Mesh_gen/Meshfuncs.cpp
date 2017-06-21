@@ -432,11 +432,12 @@ void nurb::NURBS2poly(Geom_data * var)
 	while (var != NULL) {
 		Bezier_handle *head = extraction1D(var);
 		Elem_list.push_back(head);
+		vector <double> KV_old = var->KV;
 		// now I will update the KV within var to be the C(0) version
 		refine_Xi(var);
 
 		// now I need to evaluate the bezier element at p + 1 equispaced points
-		evalBez(var, head, -1);
+		evalBez(var, head, -1, KV_old);
 
 		// now determine the arc length of the curve
 		for (int i = 0; i < head->n_el; i++) {
@@ -490,7 +491,7 @@ This function updates various fields of the Bezier_elem struct
 
 **********************************************************************************/
 
-void nurb::evalBez(Geom_data * var, Bezier_handle *Bez, int elem)
+void nurb::evalBez(Geom_data * var, Bezier_handle *Bez, int elem, vector <double> KV_old)
 {	
 	// First I need to determine the knot vector for the element
 	int start, stop;
@@ -498,10 +499,12 @@ void nurb::evalBez(Geom_data * var, Bezier_handle *Bez, int elem)
 	if (elem == -1){    // this means the elements need to be created
 	// now I need to evaluate all of the basis functions at p+1 points
 	eval_bern(Bez->p, Bez->p + 1,Bez);
-	// now I need to determine the IEN array for the bezier elements in the NURBS curves
-	IEN(var->NCP, var->p_deg, var->KV, Bez->n_el);
 
-	get_P_and_W(Bez, var);
+	get_P_and_W(Bez, var, KV_old);
+
+	// now I need to determine the IEN array for the bezier elements in the NURBS curves
+	vector<vector<int>>IEN_cur = IEN(var->NCP, var->p_deg, var->KV, Bez->n_el);
+	Master_IEN.push_back(IEN_cur);
 	
 	// now evaluate each physical location which corresponds to each xi
 		stop = Bez->n_el;
@@ -722,7 +725,7 @@ void nurb::eval_bern(int p, int n, Bezier_elem *Bez)
 
 Function description:
 This function evaluates the bernstein basis functions at a set of equispaced
-quadrature points.  There are p+1 of these quadrature points
+points.  There are p+1 of these points
 
 
 Precondition:
@@ -771,10 +774,11 @@ like it would for the first time this function is called.  If it is false, it me
 that the function didn't do anything since there is already data.
 **********************************************************************************/
 
-void nurb::get_P_and_W(Bezier_handle * Bez, Geom_data *var)
+void nurb::get_P_and_W(Bezier_handle * Bez, Geom_data *var, vector<double> KV_old)
 {
 	// First pull off the current IEN array
-	vector < vector < int>> IEN = Master_IEN.back();
+	int n = KV_old.size() - (Bez->p + 1);
+	vector <vector <int>> IEN_cur = IEN(n, Bez->p, KV_old,Bez->n_el);
 
 	// Next construct the projected control points into the matrix data type
 	for (int i = 0; i < Bez->n_el; i++) {
@@ -786,15 +790,16 @@ void nurb::get_P_and_W(Bezier_handle * Bez, Geom_data *var)
 		for (int j = 0; j <= Bez->p; j++) {
 			for (int k = 0; k < 3; k++) {
 				if (k != 2) {
-					proj(j, k) = var->controlP[IEN[i][j]][k];
+					proj(j, k) = var->controlP[IEN_cur[i][j]][k];
 				}
 				else {
-					proj(j, k) = var->weight[IEN[i][j]];
+					proj(j, k) = var->weight[IEN_cur[i][j]];
 				}
 			}
 		}
 		// now need to multiply this vector by the transpose of the extraction operator
 		MatrixXd Bez_points;
+
 		Bez_points.resize(Bez->p + 1, 3);
 		Bez_points = Bez->Operator[i].transpose()*proj;
 
@@ -838,7 +843,7 @@ Postcondition:
 This function updates the Master_IEN protected data variable
 **********************************************************************************/
 
-void nurb::IEN(int n, int p, vector<double> Xi, int n_el)
+vector<vector<int>> nurb::IEN(int n, int p, vector<double> Xi, int n_el)
 {
 	// this will make the transpose of the Matlab version of this code.  The reason this is done is because c++ has row order to it while Matlab has column order
 	// the numbers within the IEN array denote the index of the basis function, therefore, it will start at 0 instead of 1
@@ -857,7 +862,7 @@ void nurb::IEN(int n, int p, vector<double> Xi, int n_el)
 			e++;
 	}
 	// now combine into the master array with stores the IEN Arrays for each of the NURBS curves
-	Master_IEN.push_back(IEN);
+	return IEN;
 }
 
 /**********************************************************************************
@@ -994,8 +999,9 @@ void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
 
 	// now I need to find the curve and edge lengths of these new elements
 	Geom_data *garbage = new Geom_data;    // just need one of these so it will be happy
-	evalBez(garbage, Bez, e_index);
-	evalBez(garbage, Bez, e_index + 1);
+	vector<double> trash(1,0);
+	evalBez(garbage, Bez, e_index, trash);
+	evalBez(garbage, Bez, e_index + 1, trash);
 	curve_len(Bez, e_index);
 	curve_len(Bez, e_index + 1);
 }
@@ -1034,6 +1040,8 @@ void nurb::refine_Xi(Geom_data * var)
 		unsigned int need = var->p_deg - amount_cur;
 		if (i == Xi.size() - 1) {
 			var->KV = Xi;
+			var->LKV = Xi.size();
+			var->NCP = var->LKV - (var->p_deg + 1);
 			return;
 		}
 		else {
