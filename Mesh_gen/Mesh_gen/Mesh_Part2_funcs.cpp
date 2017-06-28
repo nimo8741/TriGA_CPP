@@ -70,13 +70,20 @@ void nurb::create_geo_file(string filename)
 		for (int j = 0; j < p_count - p_start; j++) {
 			if (j == p_count - p_start - 1) {
 				sprintf_s(line, size, "Line(%d) = {%d, %d};", l_count, j + p_start, p_start);
+				geo_file << line << endl;
+
+				sprintf_s(line, size, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, p_start);
+				geo_file << line << endl;
 
 			}
 			else {
 				sprintf_s(line, size, "Line(%d) = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
+				geo_file << line << endl;
+				sprintf_s(line, size, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
+				geo_file << line << endl;
+
 			}
 
-			geo_file << line << endl;
 			l_count++;
 		}
 		geo_file << endl;
@@ -99,7 +106,7 @@ void nurb::create_geo_file(string filename)
 			cur_Nurb_geo = cur_Nurb_geo->next;
 		}
 
-		vector<vector<int>> boundary_group (1, vector<int>(1,0));   // this initializes a dynamic 2D vector with a single 1x1 entry contains a 0 for element 0
+		/*vector<vector<int>> boundary_group (1, vector<int>(1,0));   // this initializes a dynamic 2D vector with a single 1x1 entry contains a 0 for element 0
 
 		// each row in boundary_group corresponds to a different boundary condition.  These start at condition 0 and increase by 1
 		// each value in it denotes the index of the element which belongs to that boundary condition
@@ -125,7 +132,7 @@ void nurb::create_geo_file(string filename)
 
 		// now I need to translate these elements into the lines which were used previously. I know that there will be p number of lines in each element
 		for (unsigned int j = 1; j <= boundary_group.size(); j++) {
-			string phy_line = "Physical Line(\"Boundary Group ";
+			string phy_line = "Physical Line(\"Knot Vector Section ";
 			phy_line += to_string(i + j);
 			phy_line += "\") = {";
 			for (unsigned int k = 0; k < boundary_group[j - 1].size(); k++) {
@@ -139,7 +146,7 @@ void nurb::create_geo_file(string filename)
 			geo_file << phy_line << endl;
 
 		}
-
+		*/
 
 		geo_file << endl << endl;
 	}
@@ -226,7 +233,7 @@ void nurb::readMsh(std::string filename)
 	getline(infile, line);
 
 	getline(infile, line);
-	int phy_groups = stoi(line);
+	phy_groups = stoi(line);
 	// now loop through all of the physical group data info, I don't really care about this since it is already known
 	for (int i = 0; i < phy_groups; i++) {
 		getline(infile, line);
@@ -303,8 +310,8 @@ void nurb::readMsh(std::string filename)
 	*/
 	int type = 1;
 	for (int i = 0; i < num_elem; i++) { 
-		//if (i > 72)
-		//	bool fuck = true;
+		if (i > 71)
+			bool fuck = true;
 		// first I need to skip through all of the elements that are 2 node lines as they are not important
 		int index, num_tag, phys_en, geo_en, node1, node2, node3;
 		while (type == 1) {
@@ -332,6 +339,8 @@ void nurb::readMsh(std::string filename)
 
 		// now put this data into the tri_elem structs
 		Tri_elem *current = new Tri_elem;
+		vector<int> IEN_row(10, 0);   // this will comprise the row in the IEN array, so I will make it while I go through this next section of code and then add it to the full IEN
+
 		// first deal with the 10 control points, also I will do some of the loop unrolling myself here for efficiency the control points are laid out like
 		/*
 
@@ -354,14 +363,17 @@ void nurb::readMsh(std::string filename)
 		point[0] = node_list[node1][0];   // point 1
 		point[1] = node_list[node1][1];
 		current->controlP.push_back(point);
+		IEN_row[0] = node1;
 
 		point[0] = node_list[node2][0];   // point 2
 		point[1] = node_list[node2][1];
 		current->controlP.push_back(point);
+		IEN_row[1] = node2;
 
 		point[0] = node_list[node3][0];   // point 3
 		point[1] = node_list[node3][1];
 		current->controlP.push_back(point);
+		IEN_row[2] = node3;
 
 		// now figure out the interpolation points there are found at each third down the length of the edge
 		point[0] = (2.0 / 3.0) * current->controlP[0][0] + (1.0 / 3.0) * current->controlP[1][0];
@@ -394,7 +406,9 @@ void nurb::readMsh(std::string filename)
 		point[0] = (1.0 / 2.0) * (current->controlP[5][0] + current->controlP[8][0]);
 		point[1] = (1.0 / 2.0) * (current->controlP[5][1] + current->controlP[8][1]);  // point 10, this is the midpoint between point 6 and 9
 		current->controlP.push_back(point);
-
+		// since this point 10 is guarenteed to be unique, I can add it to the node_list
+		node_list.push_back(point);
+		IEN_row[9] = node_list.size() - 1;
 
 		//****************************************************************//
 		//************* now figure out the global edge indexes************//
@@ -407,19 +421,39 @@ void nurb::readMsh(std::string filename)
 		int edge3Found = -1;
 
 		for (unsigned int j = 0; j < global_edges.size(); j++) {
-			if ((global_edges[j][0] == node1 && global_edges[j][1] == node2) || (global_edges[j][0] == node2 && global_edges[j][1] == node1)) {
-				// this allows the edge to be saved in either order
-				edge1Found = j;
+			if (global_edges[j].size() == 3) {   // this means that this row does not have the interior nodes inserted
+				if ((global_edges[j][0] == node1 && global_edges[j][1] == node2) || (global_edges[j][0] == node2 && global_edges[j][1] == node1)) {
+					// this allows the edge to be saved in either order
+					edge1Found = j;
 
-			}
-			if ((global_edges[j][0] == node2 && global_edges[j][1] == node3) || (global_edges[j][0] == node3 && global_edges[j][1] == node2)) {
-				// this allows the edge to be saved in either order
-				edge2Found = j;
+				}
+				if ((global_edges[j][0] == node2 && global_edges[j][1] == node3) || (global_edges[j][0] == node3 && global_edges[j][1] == node2)) {
+					// this allows the edge to be saved in either order
+					edge2Found = j;
 
+				}
+				if ((global_edges[j][0] == node3 && global_edges[j][1] == node1) || (global_edges[j][0] == node1 && global_edges[j][1] == node3)) {
+					// this allows the edge to be saved in either order
+					edge3Found = j;
+
+				}
 			}
-			if ((global_edges[j][0] == node3 && global_edges[j][1] == node1) || (global_edges[j][0] == node1 && global_edges[j][1] == node3)) {
-				// this allows the edge to be saved in either order
-				edge3Found = j;
+			else {    // this means that this row does have interior nodes inserted, it will have size 5
+				if ((global_edges[j][0] == node1 && global_edges[j][3] == node2) || (global_edges[j][0] == node2 && global_edges[j][3] == node1)) {
+					// this allows the edge to be saved in either order
+					edge1Found = j;
+
+				}
+				if ((global_edges[j][0] == node2 && global_edges[j][3] == node3) || (global_edges[j][0] == node3 && global_edges[j][3] == node2)) {
+					// this allows the edge to be saved in either order
+					edge2Found = j;
+
+				}
+				if ((global_edges[j][0] == node3 && global_edges[j][3] == node1) || (global_edges[j][0] == node1 && global_edges[j][3] == node3)) {
+					// this allows the edge to be saved in either order
+					edge3Found = j;
+
+				}
 
 			}
 			if ((edge1Found != -1) && (edge2Found != -1) && (edge3Found != -1)) {
@@ -427,11 +461,15 @@ void nurb::readMsh(std::string filename)
 			}
 		}
 
+
 		///////////////////////////  EDGE 1   /////////////////////////////////
-		if (edge1Found == -1) {
+		if (edge1Found == -1) {   // the -1 means that the node was not found
 			// first add the internal nodes to the node_list
 			node_list.push_back(current->controlP[3]);
+			IEN_row[3] = node_list.size() - 1;   // point 4
+
 			node_list.push_back(current->controlP[4]);
+			IEN_row[4] = node_list.size() - 1;    // point 5
 
 			// now add the indexes of these nodes into the global edges and global sides fields
 			vector <int> temp(5, 0);
@@ -451,10 +489,24 @@ void nurb::readMsh(std::string filename)
 				// node 4
 				node_list.push_back(current->controlP[3]);
 				global_edges[edge1Found].insert(global_edges[edge1Found].begin() + 1, node_list.size() - 1);
+				IEN_row[3] = node_list.size() - 1;
 
 				// node 5
 				node_list.push_back(current->controlP[4]);
 				global_edges[edge1Found].insert(global_edges[edge1Found].begin() + 2, node_list.size() - 1);
+				IEN_row[4] = node_list.size() - 1;
+
+			}
+			else {
+				if (current->controlP[3] == node_list[global_edges[edge1Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
+					IEN_row[3] = global_edges[edge1Found][1];   // update with node 4
+					IEN_row[4] = global_edges[edge1Found][2];     // I'm not sure if it ever goes into here
+
+				}
+				else {
+					IEN_row[3] = global_edges[edge1Found][2];  // this means that the edge is the reverse order so I need to switch the assignment
+					IEN_row[4] = global_edges[edge1Found][1];
+				}
 
 			}
 		}
@@ -466,7 +518,10 @@ void nurb::readMsh(std::string filename)
 		if (edge2Found == -1) {
 			// first add the internal nodes to the node_list
 			node_list.push_back(current->controlP[5]);
+			IEN_row[5] = node_list.size() - 1;   // point 6
+
 			node_list.push_back(current->controlP[6]);
+			IEN_row[6] = node_list.size() - 1;   // point 7
 
 
 			vector <int> temp(5, 0);
@@ -486,19 +541,35 @@ void nurb::readMsh(std::string filename)
 				// node 6
 				node_list.push_back(current->controlP[5]);
 				global_edges[edge2Found].insert(global_edges[edge2Found].begin() + 1, node_list.size() - 1);
+				IEN_row[5] = node_list.size() - 1;
 
 				// node 7
 				node_list.push_back(current->controlP[6]);
 				global_edges[edge2Found].insert(global_edges[edge2Found].begin() + 2, node_list.size() - 1);
+				IEN_row[6] = node_list.size() - 1;
+			}
+			else {
+				if (current->controlP[5] == node_list[global_edges[edge2Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
+					IEN_row[5] = global_edges[edge2Found][1];   // update with node 6
+					IEN_row[6] = global_edges[edge2Found][2];    // I'm not sure if it ever goes into here
 
+				}
+				else {
+					IEN_row[5] = global_edges[edge2Found][2];  // this means that the edge is the reverse order so I need to switch the assignment
+					IEN_row[6] = global_edges[edge2Found][1];
+				}
 			}
 		}
 
 		//////////////////////////   EDGE 3    /////////////////////////////////
 		if (edge3Found == -1) {
 			// first add the internal nodes to the node_list
-			node_list.push_back(current->controlP[5]);
-			node_list.push_back(current->controlP[6]);
+			node_list.push_back(current->controlP[7]);
+			IEN_row[7] = node_list.size() - 1;   // point 8
+
+			node_list.push_back(current->controlP[8]);
+			IEN_row[8] = node_list.size() - 1;   // point 9
+
 
 			vector <int> temp(5, 0);
 			temp[0] = node3;
@@ -523,19 +594,24 @@ void nurb::readMsh(std::string filename)
 				global_edges[edge3Found].insert(global_edges[edge3Found].begin() + 2, node_list.size() - 1);
 
 			}
+			else {
+				if (current->controlP[7] == node_list[global_edges[edge3Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
+					IEN_row[7] = global_edges[edge3Found][1];   // update with node 8
+					IEN_row[8] = global_edges[edge3Found][2];      // I'm not sure if it ever goes into here
+
+				}
+				else {
+					IEN_row[7] = global_edges[edge3Found][2];  // this means that the edge is the reverse order so I need to switch the assignment
+					IEN_row[8] = global_edges[edge3Found][1];
+				}
+			}
 		}
 
 		// now add current to the list of triangular elements
 		triangles.push_back(current);
+		Tri_IEN.push_back(IEN_row);
 		getline(infile, line);
 	}
 
 }
-
-void nurb::smoothMesh()
-{
-
-}
-
-
 

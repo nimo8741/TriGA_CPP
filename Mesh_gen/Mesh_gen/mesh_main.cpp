@@ -16,6 +16,7 @@ int main(int argc, char*argv[]) {
 	// the first command line argument should be the filename
 	action->head_nurb = action->readSpline(argv[1]);
 	action->NURBS2poly(action->head_nurb);
+	// change eval_bern to change the evaluation rules.  right now it does it at xi = 0, 0.5, 1
 
 	// Part 2 Making the Linear Mesh
 	action->create_geo_file(argv[1]);

@@ -498,7 +498,7 @@ void nurb::evalBez(Geom_data * var, Bezier_handle *Bez, int elem, vector <double
 
 	if (elem == -1){    // this means the elements need to be created
 	// now I need to evaluate all of the basis functions at p+1 points
-	eval_bern(Bez->p, Bez->p + 1,Bez);
+	eval_bern(Bez->p, Bez->p + 1,Bez);                                            // need to change this to change where the knot vectors are evaluated
 
 	get_P_and_W(Bez, var, KV_old);
 

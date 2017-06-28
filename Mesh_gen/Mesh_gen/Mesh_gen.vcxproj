@@ -144,6 +144,7 @@
     <ClCompile Include="Meshfuncs.cpp" />
     <ClCompile Include="mesh_main.cpp" />
     <ClCompile Include="Mesh_Part2_funcs.cpp" />
+    <ClCompile Include="Mesh_Part3_funcs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Meshfuncs.h" />

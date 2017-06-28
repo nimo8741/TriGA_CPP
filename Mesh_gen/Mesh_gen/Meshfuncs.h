@@ -42,7 +42,40 @@ struct Tri_elem {
 	std::vector<std::vector<double>> controlP;    // this is a 2D array containing the x and y location of each of the 10 control points.
 	std::vector<int> global_side;    // this contains the global index for each of the three sides of the triangle.  They are not unique to each element as almost all sides are shared
 	                                 // this index corresponds to the index in the global_edges variable
-	
+};
+
+struct quadInfo {
+	double quadP[16][2] =      // this contains the x and y coordinates for the quadrature points   this only supports 16 point quadrature rule right now
+	// define the values within quadP
+	{
+		{0.0571, 0.0655},
+		{0.2768, 0.0502},
+		{0.5836, 0.0289},
+		{0.8602, 0.0097},
+		{0.0571, 0.3112},
+		{0.2768, 0.2386},
+		{0.5836, 0.1374},
+		{0.8602, 0.0461},
+		{0.0571, 0.6317},
+		{0.2768, 0.4845},
+		{0.5836, 0.2790},
+		{0.8602, 0.0936},
+		{0.0571, 0.8774},
+		{0.2768, 0.6729},
+		{0.5836, 0.3875},
+		{0.8602, 0.1301}
+	};
+
+	double weights[16] = { 0.0236, 0.0354, 0.0226, 0.0054, 0.0442, 0.0663, 0.0423, 0.0102, 0.0442, 0.0663, 0.0423, 0.0102, 0.0236, 0.0354, 0.0226, 0.0054 };  
+	                                      // this contains the weighting information
+};
+
+struct tri_10_output {
+	std::vector<double> R;                    // this is the evaluation of the basis function evaluated at the desired locations
+	std::vector<std::vector<double>> dR_dx;   // this is the array containing the [dR_dx, dR_dy] derivatives for each desired location
+	std::vector<double> x;                    // this is the physical location corresponding to the desired parametric location
+	double J_det;                             // this is the determinant of the Jacobian which maps from the parametric space to the physical space
+	std::vector<std::vector<double>> Jacob;   // this is the array containing the shape function derivatives which make up the Jacobian
 };
 
 
@@ -76,6 +109,12 @@ class nurb{
 
 		// Part 3: Smoothing and degree elevating the linear mesh
 		void smoothMesh();
+		void adjust_boundary();
+		std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
+		void LE2D();
+		void evaluate_tri_basis();
+		tri_10_output tri_10_fast(int q);
+
 
 
 	protected:
@@ -85,7 +124,8 @@ class nurb{
 		std::vector< Bezier_handle *> Elem_list;    // this is a list of he bezier elements.  Each entry contains all of the elements which make up the NURBS curve
 		int num_curves;
 		std::vector < double> fast_fact;
-		std::vector <std::vector< std::vector<int>>> Master_IEN;
+		std::vector <std::vector< std::vector<int>>> Master_IEN;   // this is the IEN Array for the NURBS curves, not for the triangular elements
+		std::vector <std::vector<int>> Tri_IEN;    // this is the IEN Array that describes which global nodes exist within each of the triangle elements
 
 
 		std::vector <Tri_elem *> triangles;      // this is a list of all of the triangular elements in the mesh
@@ -94,13 +134,17 @@ class nurb{
 		// the second is the second node for the side, and the third is the physical group
 	    // to which that edge belongs to.  By physical side, it is meant which boundary condition group it belongs to.
 		std::vector<std::vector <double>> node_list;
-
-
+		std::vector<int> bNodes;    // this is a list of all of the boundary nodes
+		int phy_groups;     // This is a value which keeps track of how many boundary line segments there are.  It is 1 larger than that since the last physical group is the internal domain of interest
+		std::vector<std::vector<double>> tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the 10 basis functions
+	    std::vector<std::vector<std::vector<double>>> tri_dN_du;
+		// this is the 3D array containing the parametric derivative information.  The first dimension is the 16 evaluation points, the second are the 10 basis functions, and the third is each of the 3 directions of derivatives.
 
 
 
 	private:
 		void refine_Xi(Geom_data *var);
+		const int num_quad = 16;
 
 
 };
