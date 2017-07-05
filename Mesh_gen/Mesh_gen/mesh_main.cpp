@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "Meshfuncs.h"
 #include <Eigen/Dense>
+#include <cstdarg>
 
 using namespace std;
 using namespace Eigen;
@@ -21,10 +22,18 @@ int main(int argc, char*argv[]) {
 	// Part 2 Making the Linear Mesh
 	action->create_geo_file(argv[1]);
 	action->call_gmsh(argv[1]);
-	action->readMsh(argv[1]);
+
+	int degree;
+	if (argc == 3) {
+		degree = stoi(argv[2]);
+	}
+	else
+		degree = 3;   //default to order 3
+
+	action->readMsh(argv[1], degree);
 
 	// Part 3 Smoothing and Degree Elevating the mesh
-	action->smoothMesh();
+	action->smoothMesh(degree);
 
 	
 	return 0;

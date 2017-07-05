@@ -740,8 +740,8 @@ void nurb::eval_bern(int p, int n, Bezier_handle *Bez)
 {
 	vector <double> xi_list;
 	
-	for (int count = 0; count <= 2; count ++) {     // this loops through all of the equispaced p + 1 evaluation points
-		double xi = (double) count / 2.0;            // this is so it evaluates at the beginning middle and end
+	for (int count = 0; count <= p; count ++) {     // this loops through all of the equispaced p + 1 evaluation points  I CHANGED THIS FROM 2 to p
+		double xi = (double) count / p;            // this is so it evaluates equispace p + 1 points
 		xi_list.push_back(xi);
 		vector <double> same_xi;
 		for (int i = 1; i <= p + 1; i++) {           // this loops through all of the basis function

@@ -72,10 +72,10 @@ struct quadInfo {
 
 struct tri_10_output {
 	std::vector<double> R;                    // this is the evaluation of the basis function evaluated at the desired locations
-	std::vector<std::vector<double>> dR_dx;   // this is the array containing the [dR_dx, dR_dy] derivatives for each desired location
+	Eigen::MatrixXd dR_dx;   // this is the array containing the [dR_dx, dR_dy] derivatives for each desired location
 	std::vector<double> x;                    // this is the physical location corresponding to the desired parametric location
 	double J_det;                             // this is the determinant of the Jacobian which maps from the parametric space to the physical space
-	std::vector<std::vector<double>> Jacob;   // this is the array containing the shape function derivatives which make up the Jacobian
+	Eigen::Matrix2d Jacob;   // this is the array containing the shape function derivatives which make up the Jacobian
 };
 
 
@@ -105,17 +105,23 @@ class nurb{
 		// Part 2: Making the linear mesh and reading the result back into this program
 		void create_geo_file(std::string filename);
 		void call_gmsh(std::string filename);
-		void readMsh(std::string filename);
+		void readMsh(std::string filename, int degree);
 
 		// Part 3: Smoothing and degree elevating the linear mesh
-		void smoothMesh();
-		void adjust_boundary();
+		void smoothMesh(int degree);
+		void smooth_weights(int degree);
+		void adjust_boundary(int degree);
+		void boundary_weights(int degree);
+
+		void adjust_boundary_deg3();
 		std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
-		void LE2D();
-		void evaluate_tri_basis();
-		tri_10_output tri_10_fast(int q);
+		void LE2D(int degree);
+		void evaluate_tri_basis(int degree);
+		tri_10_output tri_10_fast(unsigned int elem, int q);
 
 
+
+		Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
 
 	protected:
 		std::vector< std::vector<int> > BC;       // this is the boundary condition matrix.  There is only one for the entire problem
@@ -132,19 +138,23 @@ class nurb{
 		std::vector<std::vector <int>> global_edges; 
 		// the first column of the above field denotes the index of the first node in the side, 
 		// the second is the second node for the side, and the third is the physical group
-	    // to which that edge belongs to.  By physical side, it is meant which boundary condition group it belongs to.
+	    // to which that edge belongs to.  By physical side, it is meant which bezier "half element" it belongs to
 		std::vector<std::vector <double>> node_list;
 		std::vector<int> bNodes;    // this is a list of all of the boundary nodes
 		int phy_groups;     // This is a value which keeps track of how many boundary line segments there are.  It is 1 larger than that since the last physical group is the internal domain of interest
 		std::vector<std::vector<double>> tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the 10 basis functions
 	    std::vector<std::vector<std::vector<double>>> tri_dN_du;
 		// this is the 3D array containing the parametric derivative information.  The first dimension is the 16 evaluation points, the second are the 10 basis functions, and the third is each of the 3 directions of derivatives.
+		int nodes_in_triangle;
+		std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, and the section of the element
+
 
 
 
 	private:
 		void refine_Xi(Geom_data *var);
 		const int num_quad = 16;
+
 
 
 };
