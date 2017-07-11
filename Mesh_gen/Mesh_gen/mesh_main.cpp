@@ -35,6 +35,9 @@ int main(int argc, char*argv[]) {
 	// Part 3 Smoothing and Degree Elevating the mesh
 	action->smoothMesh(degree);
 
+	// Part 4 Write output file to matlab to then be diplayed
+	action->create_xmsh(argv[1], degree);
+
 	
 	return 0;
 }

@@ -73,6 +73,9 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <ExecutablePath>C:\Program Files\MATLAB\R2016b\bin\win64;$(ExecutablePath)</ExecutablePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\Program Files\MATLAB\R2016b\extern\include</IncludePath>
+    <LibraryPath>C:\Program Files\MATLAB\R2016b\extern\lib\win64\microsoft;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -94,6 +97,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>libmx.lib;libeng.lib;libmex.lib;libmat.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -145,6 +149,7 @@
     <ClCompile Include="mesh_main.cpp" />
     <ClCompile Include="Mesh_Part2_funcs.cpp" />
     <ClCompile Include="Mesh_Part3_funcs.cpp" />
+    <ClCompile Include="Mesh_Part4_funcs.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Meshfuncs.h" />

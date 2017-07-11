@@ -39,7 +39,7 @@ struct Bezier_handle {
 };
 
 struct Tri_elem {
-	std::vector<std::vector<double>> controlP;    // this is a 2D array containing the x and y location of each of the 10 control points.
+	std::vector<int> controlP;    // this is a vector which contains the indexes of the nodes that triangular element contains.  It is essentially a row from the IEN array
 	std::vector<int> global_side;    // this contains the global index for each of the three sides of the triangle.  They are not unique to each element as almost all sides are shared
 	                                 // this index corresponds to the index in the global_edges variable
 };
@@ -108,20 +108,31 @@ class nurb{
 		void readMsh(std::string filename, int degree);
 
 		// Part 3: Smoothing and degree elevating the linear mesh
-		void smoothMesh(int degree);
-		void smooth_weights(int degree);
-		void adjust_boundary(int degree);
-		void boundary_weights(int degree);
+		void smoothMesh(int mesh_degree);
+		//void smooth_weights(int degree);
+		void create_side_nodes();
+		void organize_boundary();
+		bool operator () (int i, int j);
+		void split_and_extract();
+		std::vector<double> determine_elem_split(int cur_nurb, int cur_elem);
+		void curve_refine(Bezier_handle * Bez, int cur_elem, std::vector<double> xi_to_add, bool part1);
+		void elevate_degree(Bezier_handle * Bez, int element);
+		void assign_boundary_points();
+		//void boundary_weights(int degree);
+		//void refine_and_elevate(int degree, std::vector<double> xi_list, );
 
-		void adjust_boundary_deg3();
-		std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
-		void LE2D(int degree);
-		void evaluate_tri_basis(int degree);
-		tri_10_output tri_10_fast(unsigned int elem, int q);
+		//void adjust_boundary_deg3();
+		//std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
+		//void LE2D(int degree);
+		//void evaluate_tri_basis(int degree);
+		//tri_10_output tri_10_fast(unsigned int elem, int q);
+
+		//Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
 
 
-
-		Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
+		// Part 4: Write the mesh to a .xmsh file to be read in by matlab and displayed
+		void create_xmsh(std::string filename, int degree);
+		void display_mesh(std::string filename);
 
 	protected:
 		std::vector< std::vector<int> > BC;       // this is the boundary condition matrix.  There is only one for the entire problem
@@ -131,7 +142,6 @@ class nurb{
 		int num_curves;
 		std::vector < double> fast_fact;
 		std::vector <std::vector< std::vector<int>>> Master_IEN;   // this is the IEN Array for the NURBS curves, not for the triangular elements
-		std::vector <std::vector<int>> Tri_IEN;    // this is the IEN Array that describes which global nodes exist within each of the triangle elements
 
 
 		std::vector <Tri_elem *> triangles;      // this is a list of all of the triangular elements in the mesh
@@ -145,8 +155,11 @@ class nurb{
 		std::vector<std::vector<double>> tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the 10 basis functions
 	    std::vector<std::vector<std::vector<double>>> tri_dN_du;
 		// this is the 3D array containing the parametric derivative information.  The first dimension is the 16 evaluation points, the second are the 10 basis functions, and the third is each of the 3 directions of derivatives.
+		
+		int degree;
 		int nodes_in_triangle;
 		std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, and the section of the element
+		std::vector<std::vector<int>> node_side_index;
 
 
 

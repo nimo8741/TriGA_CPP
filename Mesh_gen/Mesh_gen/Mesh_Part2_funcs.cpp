@@ -305,7 +305,7 @@ void nurb::readMsh(std::string filename, int degree)
 
 		// now put this data into the tri_elem structs
 		Tri_elem *current = new Tri_elem;
-		vector<int> IEN_row(nodes_in_triangle, 0);   // this will comprise the row in the IEN array, so I will make it while I go through this next section of code and then add it to the full IEN
+		current->controlP.resize(nodes_in_triangle);
 
 		// 
 		/*
@@ -334,18 +334,15 @@ void nurb::readMsh(std::string filename, int degree)
 		vector<double> point(3, 1);     // this will set it so that the default weight for the nodes is 1
 		point[0] = node_list[node1][0];   // point 1
 		point[1] = node_list[node1][1];
-		current->controlP.push_back(point);
-		IEN_row[0] = node1;
+		current->controlP[0] = node1;
 
 		point[0] = node_list[node2][0];   // point 2
 		point[1] = node_list[node2][1];
-		current->controlP.push_back(point);
-		IEN_row[1] = node2;
+		current->controlP[1] = node2;
 
 		point[0] = node_list[node3][0];   // point 3
 		point[1] = node_list[node3][1];
-		current->controlP.push_back(point);
-		IEN_row[2] = node3;
+		current->controlP[2] = node3;
 
 
 		// Now figure out all of the other points
@@ -355,17 +352,24 @@ void nurb::readMsh(std::string filename, int degree)
 		int point2index = 1;
 		int point3index = 2;
 
-		vector<double> point1 = current->controlP[point1index]; // have a way to keep track of each of the three vertices of the virtual triangle
+		vector<double> point1 = node_list[current->controlP[point1index]]; // have a way to keep track of each of the three vertices of the virtual triangle
 		
-		vector<double> point2 = current->controlP[point2index];
-		vector<double> point3 = current->controlP[point3index];
+		vector<double> point2 = node_list[current->controlP[point2index]];
+		vector<double> point3 = node_list[current->controlP[point3index]];
 		
 		int nodes_added = 3;
+		
+		vector<vector<double>> current_controlP;
+		current_controlP.push_back(point1);
+		current_controlP.push_back(point2);
+		current_controlP.push_back(point3);
+
 		while (nodes_added < nodes_in_triangle) {
 			int nodes_inlevel_added = 3;
 			int nodes_inlevel = 3 * virtual_degree;
 			int nodes_on_side = 1;    // this will keep track of how many nodes I have added on the side
 			while (nodes_inlevel_added < nodes_inlevel) {  // for this I am in the same level
+
 				double coef1 = double(virtual_degree - (nodes_on_side % virtual_degree)) / double(virtual_degree);    // this is the coefficient which will be multiplied with the first point
 				double coef2 = double(nodes_on_side % virtual_degree) / double(virtual_degree);   // this is the coefficient which will be multiplied with the second point
 
@@ -384,7 +388,7 @@ void nurb::readMsh(std::string filename, int degree)
 					point[1] = coef1 * point2[1] + coef2 * point3[1];
 				}
 				
-				current->controlP.push_back(point);
+				current_controlP.push_back(point);
 				nodes_inlevel_added++;   // now update the information so that it will move onto the next point
 				nodes_added++;
 				nodes_on_side++;
@@ -394,22 +398,22 @@ void nurb::readMsh(std::string filename, int degree)
 			// now prepare the next level of the triangle
 			if (nodes_added < nodes_in_triangle) {
 
-				point1[0] = current->controlP[point3index + 1][0];  // I will need point1 regardless
-				point1[1] = current->controlP[point1index + nodes_inlevel - 1][1];
+				point1[0] = current_controlP[point3index + 1][0];  // I will need point1 regardless
+				point1[1] = current_controlP[point1index + nodes_inlevel - 1][1];
 
 				virtual_degree = virtual_degree - 3;
-				current->controlP.push_back(point1);
+				current_controlP.push_back(point1);
 				nodes_added++;
 
 
 				if (virtual_degree) {    // this means there is a triangle to add, if it doesn't hit this, it means that there is only a single node to add
-					point2[0] = current->controlP[point3index + 1 + virtual_degree][0];
-					point2[1] = current->controlP[point1index + nodes_inlevel - 1][1];
-					current->controlP.push_back(point2);
+					point2[0] = current_controlP[point3index + 1 + virtual_degree][0];
+					point2[1] = current_controlP[point1index + nodes_inlevel - 1][1];
+					current_controlP.push_back(point2);
 
-					point3[0] = current->controlP[point3index + 1][0];
-					point3[1] = current->controlP[point1index + nodes_inlevel - 1 - virtual_degree][1];
-					current->controlP.push_back(point3);
+					point3[0] = current_controlP[point3index + 1][0];
+					point3[1] = current_controlP[point1index + nodes_inlevel - 1 - virtual_degree][1];
+					current_controlP.push_back(point3);
 					nodes_added += 2;
 					point1index += nodes_inlevel;
 					point2index += nodes_inlevel;
@@ -420,8 +424,8 @@ void nurb::readMsh(std::string filename, int degree)
 
 		// now go back through and add all of the internal nodes to the node_list since they cannot be repeats
 		for (int j = 3 * degree; j < nodes_in_triangle; j++) {
-			node_list.push_back(current->controlP[j]);
-			IEN_row[j] = node_list.size() - 1;  
+			node_list.push_back(current_controlP[j]);
+			current->controlP[j] = node_list.size() - 1;  
 
 		}
 
@@ -488,9 +492,9 @@ void nurb::readMsh(std::string filename, int degree)
 
 
 			for (int k = 3; k < degree + 2; k++) {
-				node_list.push_back(current->controlP[k]);
-				IEN_row[k] = node_list.size() - 1;
-				temp[k - 2] = IEN_row[k];
+				node_list.push_back(current_controlP[k]);
+				current->controlP[k] = node_list.size() - 1;
+				temp[k - 2] = current->controlP[k];
 			}
 
 			// now add the indexes of these nodes into the global edges and global sides fields
@@ -504,21 +508,21 @@ void nurb::readMsh(std::string filename, int degree)
 			if (global_edges[edge1Found].size() == 3) {  // this means that this edge does not include the p - 1 interior points and so they must be added
 				
 				for (int k = 3; k < degree + 2; k++) {
-					node_list.push_back(current->controlP[k]);
+					node_list.push_back(current_controlP[k]);
 					global_edges[edge1Found].insert(global_edges[edge1Found].begin() + 1, node_list.size() - 1);
-					IEN_row[k] = node_list.size() - 1;
+					current->controlP[k] = node_list.size() - 1;
 				}
 			}
 			else {   // the global edge does contain the p - 1 interior points
-				if (current->controlP[3] == node_list[global_edges[edge1Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
+				if (current_controlP[3] == node_list[global_edges[edge1Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
 					for (int k = 1; k < degree; k++) {
-						IEN_row[k + 2] = global_edges[edge1Found][k];
+						current->controlP[k + 2] = global_edges[edge1Found][k];
 					}
 
 				}
 				else {
 					for (int k = 1; k < degree; k++) {
-						IEN_row[k + 2] = global_edges[edge1Found][degree - k];
+						current->controlP[k + 2] = global_edges[edge1Found][degree - k];
 					}
 				}
 
@@ -537,9 +541,9 @@ void nurb::readMsh(std::string filename, int degree)
 
 
 			for (int k = degree + 2; k < 2*degree + 1; k++) {
-				node_list.push_back(current->controlP[k]);
-				IEN_row[k] = node_list.size() - 1;
-				temp[k - degree - 1] = IEN_row[k];
+				node_list.push_back(current_controlP[k]);
+				current->controlP[k] = node_list.size() - 1;
+				temp[k - degree - 1] = current->controlP[k];
 			}
 			global_edges.push_back(temp); // add this edge to the global list
 			current->global_side.push_back(global_edges.size() - 1);   // update the current element's edge parameter with the index of the global edge
@@ -550,21 +554,21 @@ void nurb::readMsh(std::string filename, int degree)
 			if (global_edges[edge2Found].size() == 3) {  // this means that this edge does not include the 2 interior points and so they must be added
 
 				for (int k = degree + 2; k < 2*degree + 1; k++) {
-					node_list.push_back(current->controlP[k]);
+					node_list.push_back(current_controlP[k]);
 					global_edges[edge2Found].insert(global_edges[edge2Found].begin() + 1, node_list.size() - 1);
-					IEN_row[k] = node_list.size() - 1;
+					current->controlP[k] = node_list.size() - 1;
 				}
 			}
 			else {
-				if (current->controlP[degree + 2] == node_list[global_edges[edge2Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
+				if (current_controlP[degree + 2] == node_list[global_edges[edge2Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
 					for (int k = 1; k < degree; k++) {
-						IEN_row[degree + 1 + k] = global_edges[edge2Found][k];
+						current->controlP[degree + 1 + k] = global_edges[edge2Found][k];
 					}
 
 				}
 				else {
 					for (int k = 1; k < degree; k++) {
-						IEN_row[degree + 1 + k] = global_edges[edge2Found][degree - k];
+						current->controlP[degree + 1 + k] = global_edges[edge2Found][degree - k];
 					}
 				}
 			}
@@ -581,9 +585,9 @@ void nurb::readMsh(std::string filename, int degree)
 
 
 			for (int k = 2*degree + 1; k < 3 * degree; k++) {
-				node_list.push_back(current->controlP[k]);
-				IEN_row[k] = node_list.size() - 1;
-				temp[k - degree - degree] = IEN_row[k];   // subtraction is faster than doing the multiplication of 2* degree
+				node_list.push_back(current_controlP[k]);
+				current->controlP[k] = node_list.size() - 1;
+				temp[k - degree - degree] = current->controlP[k];   // subtraction is faster than doing the multiplication of 2* degree
 			}
 			global_edges.push_back(temp); // add this edge to the global list
 			current->global_side.push_back(global_edges.size() - 1);   // update the current element's edge parameter with the index of the global edge
@@ -594,21 +598,21 @@ void nurb::readMsh(std::string filename, int degree)
 			if (global_edges[edge3Found].size() == 3) {  // this means that this edge does not include the 2 interior points and so they must be added
 
 				for (int k = 2*degree + 1; k < 3 * degree; k++) {
-					node_list.push_back(current->controlP[k]);
+					node_list.push_back(current_controlP[k]);
 					global_edges[edge3Found].insert(global_edges[edge3Found].begin() + 1, node_list.size() - 1);
-					IEN_row[k] = node_list.size() - 1;
+					current->controlP[k] = node_list.size() - 1;
 				}
 
 			}
 			else {
-				if (current->controlP[2*degree + 1] == node_list[global_edges[edge3Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
+				if (current_controlP[2*degree + 1] == node_list[global_edges[edge3Found][1]]) {   // this means the edge is in the same direction as the global edge is defined
 					for (int k = 1; k < degree; k++) {
-						IEN_row[2*degree + k] = global_edges[edge3Found][k];
+						current->controlP[2*degree + k] = global_edges[edge3Found][k];
 					}
 				}
 				else {
 					for (int k = 1; k < degree; k++) {
-						IEN_row[2 * degree + k] = global_edges[edge3Found][degree - k];
+						current->controlP[2 * degree + k] = global_edges[edge3Found][degree - k];
 					}
 				}
 			}
@@ -616,7 +620,6 @@ void nurb::readMsh(std::string filename, int degree)
 
 		// now add current to the list of triangular elements
 		triangles.push_back(current);
-		Tri_IEN.push_back(IEN_row);
 		getline(infile, line);
 	}
 

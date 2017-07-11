@@ -455,7 +455,8 @@ void nurb::NURBS2poly(Geom_data * var)
 
 					// now need to go through curve refinement on that one local element
 					// I can "cheat" on the refinement since when you subdivide an element you get two of the same element, only the control points and weights change
-					subdivide_element(head, i);
+					vector<double> xi_to_add(head->p, 0.5);
+					curve_refine(head, i, xi_to_add, true);
 					i++;    // so I don't subdivide the same element again
 
 				}
@@ -899,6 +900,8 @@ void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
 		int k = Bez->p + 1;      // this is the location of the added point
 		vector<vector<double>> Q(m, vector<double>(2, 0.0));
 		vector<double> W(m, 0);
+
+		// first I need to project the curve
 		for (int j = 1; j <= m; j++) {
 			if (j == 1) {
 				Q[j - 1][0] = Bez->elem_Geom[e_index].controlP[0][0] * Bez->elem_Geom[e_index].weight[j - 1];     // I am multiplying by the weights to project the curve
@@ -1004,6 +1007,7 @@ void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
 	evalBez(garbage, Bez, e_index + 1, trash);
 	curve_len(Bez, e_index);
 	curve_len(Bez, e_index + 1);
+	delete garbage;
 }
 
 
