@@ -73,12 +73,17 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <ExecutablePath>C:\Program Files\MATLAB\R2016b\bin\win64;$(ExecutablePath)</ExecutablePath>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\Program Files\MATLAB\R2016b\extern\include</IncludePath>
-    <LibraryPath>C:\Program Files\MATLAB\R2016b\extern\lib\win64\microsoft;$(LibraryPath)</LibraryPath>
+    <ExecutablePath>$(ExecutablePath)</ExecutablePath>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\Program Files\MATLAB\R2016b\extern\include;C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP\Eigen_lib;C:\Program Files\MATLAB\R2016b\extern\include</IncludePath>
+    <LibraryPath>$(LibraryPath)</LibraryPath>
+    <ReferencePath>C:\Program Files\MATLAB\R2016b\bin\win64;$(ReferencePath)</ReferencePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP;C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP\Eigen_lib;C:\Program Files\MATLAB\R2016b\extern\include</IncludePath>
+    <ExecutablePath>$(ExecutablePath)</ExecutablePath>
+    <LibraryPath>$(LibraryPath)</LibraryPath>
+    <ReferencePath>C:\Program Files\MATLAB\R2016b\bin\win64;$(ReferencePath)</ReferencePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -88,28 +93,36 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP\Eigen_lib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Program Files\MATLAB\R2016b\extern\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>libmx.lib;libeng.lib;libmex.lib;libmat.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libmx.lib;libmat.lib;libeng.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <DelayLoadDLLs>
+      </DelayLoadDLLs>
+      <AssemblyLinkResource>%(AssemblyLinkResource)</AssemblyLinkResource>
+      <AdditionalLibraryDirectories>C:\Program Files\MATLAB\R2016b\extern\lib\win64\microsoft</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Program Files\MATLAB\R2016b\extern\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>libmx.lib;libmat.lib;libeng.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <DelayLoadDLLs>
+      </DelayLoadDLLs>
+      <AssemblyLinkResource>%(AssemblyLinkResource)</AssemblyLinkResource>
+      <AdditionalLibraryDirectories>C:\Program Files\MATLAB\R2016b\extern\lib\win64\microsoft</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

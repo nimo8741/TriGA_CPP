@@ -106,6 +106,9 @@ class nurb{
 		void create_geo_file(std::string filename);
 		void call_gmsh(std::string filename);
 		void readMsh(std::string filename, int degree);
+		void get_bary(int degree);
+		int ij_to_index(int i, int j, int degree, std::vector<double> bary);
+		std::vector<double> find_intersect(std::vector<double> line1p1, std::vector<double> line1p2, std::vector<double> line2p1, std::vector<double> line2p2);
 
 		// Part 3: Smoothing and degree elevating the linear mesh
 		void smoothMesh(int mesh_degree);
@@ -118,6 +121,8 @@ class nurb{
 		void curve_refine(Bezier_handle * Bez, int cur_elem, std::vector<double> xi_to_add, bool part1);
 		void elevate_degree(Bezier_handle * Bez, int element);
 		void assign_boundary_points();
+		double newton_find_xi(int cur_nurb, int cur_elem, std::vector<double> second_point, double guess);
+		double n_choose_k(int n, int k);
 		//void boundary_weights(int degree);
 		//void refine_and_elevate(int degree, std::vector<double> xi_list, );
 
@@ -131,8 +136,9 @@ class nurb{
 
 
 		// Part 4: Write the mesh to a .xmsh file to be read in by matlab and displayed
-		void create_xmsh(std::string filename, int degree);
+		//void create_xmsh(std::string filename, int degree);
 		void display_mesh(std::string filename);
+		double** vec_to_array(std::vector<std::vector<double>> &vec, unsigned int rows);
 
 	protected:
 		std::vector< std::vector<int> > BC;       // this is the boundary condition matrix.  There is only one for the entire problem
@@ -160,6 +166,7 @@ class nurb{
 		int nodes_in_triangle;
 		std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, and the section of the element
 		std::vector<std::vector<int>> node_side_index;
+		std::vector<std::vector<double>> bary_template;     // this is the bary centric coordinates of all of the non vertex point of the triangular element
 
 
 

@@ -20,12 +20,9 @@ using namespace Eigen;
 
 void nurb::smoothMesh(int mesh_degree)
 {
-	degree = mesh_degree;
-	create_side_nodes();
 	organize_boundary();
 	split_and_extract();
 	assign_boundary_points();
-	bool fuck = true;
 
 	//boundary_weights(degree);
 	// now I need to solve for the weights of all of the points]
@@ -95,11 +92,10 @@ void nurb::organize_boundary()
 				unsigned int cur_nurb = 0;   // this will be the identifier for the current nurbs curve.
 				bool found = false;
 				while (found == false) {
-					if (cur_nurb == 1)
-						bool fuck = true;
+
 					// in the way the mesh is defined, there is a straight line connecting all of the xi_real_loc point for the NURBS curve
 
-					unsigned xi_size = Elem_list[cur_nurb]->xi_evals.size();
+					unsigned int xi_size = int(Elem_list[cur_nurb]->xi_evals.size());
 					if (KV_section < Elem_list[cur_nurb]->n_el * (xi_size - 1)) { // this means the KV_section lies in the current NURBS curve
 						unsigned int element = KV_section / (xi_size - 1); // this is the identifier within the bezier element for that NURBS curve. Starts at 0
 						unsigned int elem_section = KV_section % (xi_size - 1);    // this is the identifier for the section within that bezier element.  Starts at 0
@@ -122,7 +118,7 @@ void nurb::organize_boundary()
 			}
 		}
 	}
-	unsigned int size = tri_NURB_elem_section_side.size();
+	size_t size = tri_NURB_elem_section_side.size();
 	vector<int> work_around(size);
 	iota(begin(work_around), end(work_around), 0);
 	sort (work_around.begin(), work_around.end(), *this);
@@ -131,6 +127,51 @@ void nurb::organize_boundary()
 		temp[i] = tri_NURB_elem_section_side[work_around[i]];
 	}
 	tri_NURB_elem_section_side = temp;
+
+	// now go through and add an identifier as to whether or not the side is "backwards"
+	int count = 0;
+	for (int i = 0; i < num_curves; i++) {
+		for (int j = 0; j < Elem_list[i]->n_el; j++) {
+			vector<double> anchor = Elem_list[i]->elem_Geom[j].controlP[0];
+
+			int elem = tri_NURB_elem_section_side[count][2];
+
+			while (count < tri_NURB_elem_section_side.size() && tri_NURB_elem_section_side[count][2] == elem) {
+
+
+
+				int tri = tri_NURB_elem_section_side[count][0];
+				int side = tri_NURB_elem_section_side[count][4];
+				int node = node_side_index[side][0];
+
+				vector<double> proper(2, 0);
+
+				int node_list_index = triangles[tri]->controlP[node];
+				proper[0] = node_list[node_list_index][0];
+				proper[1] = node_list[node_list_index][1];
+				double dist_prop = sqrt(pow(proper[0] - anchor[0], 2) + pow(proper[1] - anchor[1], 2));
+
+				vector<double> reverse(2, 0);
+				int rev_node = node_side_index[side][degree];
+				int rev_node_list_index = triangles[tri]->controlP[rev_node];
+
+				reverse[0] = node_list[rev_node_list_index][0];
+				reverse[1] = node_list[rev_node_list_index][1];
+				double dist_rev = sqrt(pow(reverse[0] - anchor[0], 2) + pow(reverse[1] - anchor[1], 2));
+
+				if (dist_prop < dist_rev) {  // this means that it is in the "correct" order
+					tri_NURB_elem_section_side[count].push_back(1);
+					anchor = reverse;
+				}
+				else {   // this means that it in the reverse order
+					tri_NURB_elem_section_side[count].push_back(0);
+					anchor = proper;
+				}
+
+				count++;
+			}
+		}
+	}
 }
 
 bool nurb::operator()(int i, int j)
@@ -186,13 +227,13 @@ void nurb::split_and_extract()
 	for (int cur_nurb = 0; cur_nurb < num_curves; cur_nurb++) {
 		for (int cur_elem = 0; cur_elem < Elem_list[cur_nurb]->n_el; cur_elem++) {
 			vector<double> xi_to_add = determine_elem_split(cur_nurb, cur_elem);
-			int num_to_increment = xi_to_add.size();
+			int num_to_increment = int(xi_to_add.size());
 			// now I need to add enough knots at these locations so that there is c(0) continuity
 			int nurb_degree = Elem_list[cur_nurb]->p;
 			for (unsigned int i = 0; i < xi_to_add.size(); i++) {
 				vector<double> repeats(nurb_degree - 1, xi_to_add[i]);
 				xi_to_add.insert(xi_to_add.begin() + i, repeats.begin(), repeats.end());
-				i += repeats.size();
+				i += int(repeats.size());
 			}
 			// now call curve_refine to refine, split, and elevate the element
 
@@ -241,25 +282,21 @@ vector<double> nurb::determine_elem_split(int cur_nurb, int cur_elem)
 		i++;
 	while (tri_NURB_elem_section_side[i][2] != cur_elem)
 		i++;
-	int i_save = i;
-	double total_dist = 0.0;
 	vector<double> split_list;
-	unsigned int max_i = tri_NURB_elem_section_side.size();
+
+	unsigned int max_i = int(tri_NURB_elem_section_side.size());
 	while (unsigned (i) < max_i && tri_NURB_elem_section_side[i][2] == cur_elem && tri_NURB_elem_section_side[i][1] == cur_nurb) {
-		vector<double> first_point = node_list[triangles[tri_NURB_elem_section_side[i][0]]->controlP[node_side_index[tri_NURB_elem_section_side[i][4]][0]]];
-		vector<double> second_point = node_list[triangles[tri_NURB_elem_section_side[i][0]]->controlP[node_side_index[tri_NURB_elem_section_side[i][4]][degree]]];;
-		double dist = sqrt(pow(first_point[0] - second_point[0], 2) + pow(first_point[1] - second_point[1], 2));
-		split_list.push_back(dist);
-		total_dist += dist;
+		// do Newton's method to find the exact parametric xi to split at
+		// need to figure out a way to make sure that second_point is actually the second point along the NURBS curve
+		vector<double> second_point;
+		if (tri_NURB_elem_section_side[i][5])  // the edge is in the proper direction
+			second_point = node_list[triangles[tri_NURB_elem_section_side[i][0]]->controlP[node_side_index[tri_NURB_elem_section_side[i][4]][degree]]];
+		else   // the edge is in the reverse direction
+			second_point = node_list[triangles[tri_NURB_elem_section_side[i][0]]->controlP[node_side_index[tri_NURB_elem_section_side[i][4]][0]]];
+
+		double value = newton_find_xi(cur_nurb, cur_elem, second_point, 0.5);
+		split_list.push_back(value);
 		i++;
-	}
-	for (unsigned int j = 0; j < split_list.size() - 1; j++) {
-		if (j == 0) {
-			split_list[j] = split_list[j] / total_dist;
-		}
-		else {
-			split_list[j] = (split_list[j] / total_dist) + split_list[j - 1];
-		}
 	}
 	split_list.pop_back();
 	return split_list;
@@ -269,7 +306,7 @@ void nurb::curve_refine(Bezier_handle * Bez, int cur_elem, vector<double> xi_to_
 {
 	// Step 1: create a knot vector for this element.  Since it is Bezier, it is easy to compute
 	int p = Bez->p;
-	unsigned int n = Bez->elem_Geom[cur_elem].controlP.size();
+	unsigned int n = int(Bez->elem_Geom[cur_elem].controlP.size());
 	vector<double> KV;
 	for (int i = 0; i < (p + 1) << 1; i++) {
 		KV.push_back(double(i / (p + 1)));
@@ -292,7 +329,7 @@ void nurb::curve_refine(Bezier_handle * Bez, int cur_elem, vector<double> xi_to_
 		KV_temp.push_back(add_cur);
 		sort(KV_temp.begin(), KV_temp.end());
 		ptrdiff_t index = find(KV_temp.begin(), KV_temp.end(), add_cur) - KV_temp.begin();
-		unsigned int k = index - 1;
+		unsigned int k = int(index - 1);
 		unsigned int m = n + 1;
 		double a;
 		for (unsigned int j = 0; j < m; j++) {
@@ -431,8 +468,8 @@ void nurb::elevate_degree(Bezier_handle * Bez, int element)
 {
 	vector<vector<double>> P = Bez->elem_Geom[element].controlP;
 	vector<vector<double>> Pe = P;
-	int p = Bez->p;
-	unsigned int n = P.size();
+	int p = int(Bez->elem_Geom[element].controlP.size()) - 1;
+	unsigned int n = int(P.size());
 	Pe.push_back(Pe[n - 1]);
 
 	for (unsigned int i = 1; i < n; i++) {
@@ -445,10 +482,10 @@ void nurb::elevate_degree(Bezier_handle * Bez, int element)
 	Bez->elem_Geom[element].controlP = Pe;
 	
 	// now figure out what to make the degree
-	unsigned int min_p = Bez->elem_Geom[0].controlP.size() - 1;
+	unsigned int min_p = int(Bez->elem_Geom[0].controlP.size()) - 1;
 	for (int i = 1; i < Bez->n_el; i++) {
 		if (Bez->elem_Geom[i].controlP.size() - 1 < min_p)
-			min_p = Bez->elem_Geom[i].controlP.size() - 1;
+			min_p = int(Bez->elem_Geom[i].controlP.size()) - 1;
 	}
 	Bez->p = min_p;
 
@@ -468,276 +505,77 @@ void nurb::assign_boundary_points()
 			int elem = tri_NURB_elem_section_side[i][2];
 			int side = tri_NURB_elem_section_side[i][4];
 			int node = node_side_index[side][j];
+			int order = tri_NURB_elem_section_side[i][5];
 
 			vector<double> actual_p(3, 0);
 			actual_p[0] = Elem_list[nurb]->elem_Geom[elem].controlP[j][0];
 			actual_p[1] = Elem_list[nurb]->elem_Geom[elem].controlP[j][1];
 			actual_p[2] = Elem_list[nurb]->elem_Geom[elem].controlP[j][2];
-			
+
 			// determine which node index this is
 			int node_list_index = triangles[tri]->controlP[node];
 
+
 			// update the list
-			node_list[node_list_index] = actual_p;
+			if (order) // this is in the proper direction
+				node_list[node_list_index] = actual_p;
+			else {   // this is in the reverse direction
+				int rev_node = node_side_index[side][degree - j];
+				int rev_node_list_index = triangles[tri]->controlP[rev_node];
+				node_list[rev_node_list_index] = actual_p;
+			}
 		}
 	}
+}
+
+double nurb::newton_find_xi(int cur_nurb, int cur_elem, vector<double> second_point, double guess)
+{
+	double tol = 0.0000001;
+	double error = 1.0;
+	int p = Elem_list[cur_nurb]->p;
+	int iter = 0;     // set a max number of iteration to prevent infinite loops
+	while (error > tol) {   // carry out the newton's method
+		// find the slope of the line, this is just the derivative of the bezier coordinate since this is the only part which changes with time
+		if (iter > 15)
+			return guess;
+
+
+		vector<double> slope_vec(2, 0);
+		vector<double> act_loc(2, 0);
+		for (int i = 0; i <= p; i++) {   // loop through all of the control point throughout the bezier element
+			vector<double> point = Elem_list[cur_nurb]->elem_Geom[cur_elem].controlP[i];
+			double bez_part_der = ((n_choose_k(p, i) * i * pow(guess, i - 1) * pow((1 - guess), (p - i))) + (n_choose_k(p, i) * pow(guess, i) * (i - p) * pow((1 - guess), (p - i - 1))));
+			double bez_part = n_choose_k(p, i) * pow(guess, i) * pow((1 - guess), (p - i));
+			slope_vec[0] = slope_vec[0] + point[0] * bez_part_der;
+			slope_vec[1] = slope_vec[1] + point[1] * bez_part_der;
+			act_loc[0] = act_loc[0] + point[0] * bez_part;
+			act_loc[1] = act_loc[1] + point[1] * bez_part;
+
+		}
+
+		// now determine what x(xi) - x_tilde is
+		error = sqrt(pow(act_loc[0] - second_point[0], 2) + pow(act_loc[1] - second_point[1], 2));  // this is just the distance formula
+		double slope = (((act_loc[0] - second_point[0]) * slope_vec[0]) + ((act_loc[1] - second_point[1]) * slope_vec[1])) / error;
+
+		// return what guess is now if there is no error
+		if (!error)
+			return guess;
+
+		// now determine where this line crosses the zero
+		guess = guess - (error / slope);
+		iter++;
+	}
+	return guess;
+}
+
+double nurb::n_choose_k(int n, int k)
+{
+	double ans;
+	ans = fast_fact[n] / (fast_fact[k] * fast_fact[n - k]);
+	return ans;
 }
 
 /*
-void nurb::boundary_weights(int degree)
-{
-	// Instead of thinking in triangles, I can instead again visualize the boundary as a NURBS curve
-	// First, I need to get all of the triangular element which are
-	//		1) on the same boundary
-	//		2) exist in the same bezier element
-	//		3) sort these in order from element section 0 to the end
-	//
-	// Second, I will need to figure out the parametric xi values for each of the nodes on this curve
-	//
-	// Third, project the coordinates of the nodes I know the weights for
-	//
-	// Fourth, perfrom curve refinement and most likely degree elevation to reach the final curve
-	//
-	// Fifth "un-project" the coordinates to get the weights of all of the intermittent points
-
-	// create a lookup table which will be used later in the function
-	// create vector which will tell the follow loop which nodes to grab, this depends on the side on degree of the triangle
-	vector<int> node_side1(degree + 1, 0);
-	node_side1[0] = 0;
-	node_side1[degree] = 1;
-	for (int j = 1; j < degree; j++) {
-		node_side1[j] = j + 2;
-	}
-
-	vector<int> node_side2(degree + 1, 0);
-	node_side2[0] = 1;
-	node_side2[degree] = 2;
-	for (int j = 1; j < degree; j++) {
-		node_side2[j] = j + degree + 1;
-	}
-
-	vector<int> node_side3(degree + 1, 0);
-	node_side3[0] = 2;
-	node_side3[degree] = 0;
-	for (int j = 1; j < degree; j++) {
-		node_side3[j] = j + (degree << 1);
-	}
-
-
-	/////////////////////   STEP 1   ////////////////////////////
-	for (int cur_nurb = 0; cur_nurb < num_curves; cur_nurb++) {
-		for (int cur_elem = 0; cur_elem < Elem_list[cur_nurb]->n_el; cur_elem++) {
-			vector<unsigned int> same_elem_handle;
-			for (unsigned int i = 0; i < tri_NURB_elem_section_side.size(); i++) {
-				if ((tri_NURB_elem_section_side[i][1] == cur_nurb) && (tri_NURB_elem_section_side[i][2] == cur_elem)) {
-					if (same_elem_handle.size() == 0)   // the size is 0 so I can add it in without care
-						same_elem_handle.push_back(i);
-					else if (same_elem_handle.back() < tri_NURB_elem_section_side[i][3])  // the list is in good order so I can slap the new entry onto the back
-						same_elem_handle.push_back(i);
-					else {     // the list will not be in order so I need to added the new element such that it will be in order
-						unsigned int j;
-						for (j = 0; j < same_elem_handle.size(); j++) {
-							// if I find an element section in the current element list which is larger than the element section I am examining (at index i) then insert accordingly
-							// so same_elem_handle is in the appropriate order by element section, smallest to largest
-							if (tri_NURB_elem_section_side[same_elem_handle[j]][3] > tri_NURB_elem_section_side[i][3])
-								break;
-						}
-						// now insert at index j
-						same_elem_handle.insert(same_elem_handle.begin() + j, i);
-					}
-				}
-			}
-			/////////////////////   STEP 2   ////////////////////////////
-			// I know that there are degree+1 point along each edge of the triangle and there is a shared node between each adjacent triangle's edges
-			// Also I know that all of these points are equispaced down each of the respective sections
-			// I'm not sure if each of the sections within the element are of equivalent size so I will assume that they are not
-
-			vector<double> xi_list(1, 0.0);
-			// first point of the first node is automatically a zero so I don't need to worry about it
-			vector<double> all_section_lens;
-			double element_len = 0.0;
-
-			// figure out the length of the section, I will do this by linearally connecting the degree + 1 points
-			for (unsigned int section = 0; section < same_elem_handle.size(); section++) {
-				double section_len = 0.0;
-				vector<double> point1(2, 0.0);
-				vector<double> point2(2, 0.0);
-
-				int tri_index = tri_NURB_elem_section_side[same_elem_handle[section]][0];
-				vector<int> nodes_to_use;
-				if (tri_NURB_elem_section_side[same_elem_handle[section]][4] == 0) {   // this is side 1
-					nodes_to_use = node_side1;
-				}
-				else if (tri_NURB_elem_section_side[same_elem_handle[section]][4] == 1) {    // this is side 2
-					nodes_to_use = node_side2;
-				}
-				else {     // this is side 3
-					nodes_to_use = node_side3;
-				}
-				for (int j = 0; j < degree; j++) {
-					point1[0] = triangles[tri_index]->controlP[nodes_to_use[j]][0];
-					point1[1] = triangles[tri_index]->controlP[nodes_to_use[j]][1];
-
-					point2[0] = triangles[tri_index]->controlP[nodes_to_use[j + 1]][0];
-					point2[1] = triangles[tri_index]->controlP[nodes_to_use[j + 1]][1];
-
-					section_len += sqrt(pow(point2[0] - point1[0], 2) + pow(point2[1] - point1[1], 2));   // update the distance
-				}
-				element_len += section_len;
-				all_section_lens.push_back(section_len);
-			}
-			// Because I use the linear distance between triangular control points to determine the position within the bezier element,
-			// I will use the sum of these distance instead of the curve lenght which was calculated in Part1 of this program.
-			// These numbers would ideally be the same, however, their slight differences cause me to make this decision.
-
-			// I will also take care of Step 3 within this loop (projecting the control points
-			double last_xi = 0.0;
-
-			for (unsigned int section = 0; section < same_elem_handle.size(); section++) {
-				int tri_index = tri_NURB_elem_section_side[same_elem_handle[section]][0];
-
-				// determine node indexing info (for step 3)
-				vector<int> nodes_to_use;
-				if (tri_NURB_elem_section_side[same_elem_handle[section]][4] == 0) {   // this is side 1
-					nodes_to_use = node_side1;
-				}
-				else if (tri_NURB_elem_section_side[same_elem_handle[section]][4] == 1) {    // this is side 2
-					nodes_to_use = node_side2;
-				}
-				else {     // this is side 3
-					nodes_to_use = node_side3;
-				}
-
-
-				double section_portion = all_section_lens[section] / element_len;
-				for (int j = 1; j <= degree + 1; j++) {
-					double xi = ((double (j) / double (degree + 1)) * section_portion) + last_xi;
-					xi_list.push_back(xi);
-
-					// Project the control points.  I will only alter the point within triangles->controlP, not node_list
-					// I will alter node_list only after all of the weight calculation is completed
-					if (triangles[tri_index]->controlP[nodes_to_use[j - 1]][2] && triangles[tri_index]->controlP[nodes_to_use[j - 1]][2] != 1.0) {
-						// do this if the weight is non zero.  This is because nonzero means I know what the weight is.  Also, skip the loop if the weight is exactly 1 since I don't really need to multiply by 1
-						triangles[tri_index]->controlP[nodes_to_use[j - 1]][0] *= triangles[tri_index]->controlP[nodes_to_use[j - 1]][2];
-						triangles[tri_index]->controlP[nodes_to_use[j - 1]][1] *= triangles[tri_index]->controlP[nodes_to_use[j - 1]][2];
-					}
-				}
-				last_xi = xi_list.back();
-			}
-			/////////////////////////////////////////////////////////////
-			/////////////////////   STEP 4   ////////////////////////////
-			/////////////////////////////////////////////////////////////
-
-			// Now I need to perform curve refinement and degree elevation.  Since this will be kind of lengthy, I will do it within another function
-
-		}
-	}
-}
-
-void nurb::adjust_boundary_deg3()
-{
-	{
-		for (unsigned int i = 0; i < triangles.size(); i++) {  //  loop through all of the triangles
-			for (int side = 0; side < 3; side++) {
-				if (global_edges[triangles[i]->global_side[side]][4] != phy_groups) {  // if it passes this, it is a boundary edge
-																								// now I need to loop through all of the nodes that would be on the boundary, there are degree + 1 of them
-					bool found0 = false;
-					bool found1 = false;
-					bool found2 = false;
-					bool found3 = false;  // these are for each of the 4 nodes along the edge
-
-					for (unsigned int j = 0; j < bNodes.size(); j++) {
-						if (bNodes[j] == global_edges[triangles[i]->global_side[side]][0]) {
-							found0 = true;
-						}
-						if (bNodes[j] == global_edges[triangles[i]->global_side[side]][1]) {
-							found1 = true;
-						}
-						if (bNodes[j] == global_edges[triangles[i]->global_side[side]][2]) {
-							found2 = true;
-						}
-						if (bNodes[j] == global_edges[triangles[i]->global_side[side]][3]) {
-							found3 = true;
-						}
-						if (found0 && found1 && found2 && found3)
-							break;
-					}
-					if (found0 == false)  // since it was not found, add the node to bNodes
-						bNodes.push_back(global_edges[triangles[i]->global_side[side]][0]);
-
-					if (found1 == false)
-						bNodes.push_back(global_edges[triangles[i]->global_side[side]][1]);
-
-					if (found2 == false)
-						bNodes.push_back(global_edges[triangles[i]->global_side[side]][2]);
-
-					if (found3 == false)
-						bNodes.push_back(global_edges[triangles[i]->global_side[side]][3]);
-					///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-					// now determine which of the KV sections ("half elements") this belongs to.  Currently, this is which half element this belongs to
-					unsigned int KV_section = global_edges[triangles[i]->global_side[side]][4];   // KV_section starts at 1
-					int cur_nurb = 0;   // this will be the identifier for the current nurbs curve.
-					bool found = false;
-					while (found == false) {
-						// in the way the mesh is defined, there is a straight line connecting all of the xi_real_loc point for the NURBS curve
-
-						unsigned xi_size = Elem_list[cur_nurb]->xi_evals.size();
-						if (KV_section <= Elem_list[cur_nurb]->n_el * (xi_size - 1)) { // this means the KV_section lies in the current NURBS curve
-							unsigned int element = KV_section / xi_size; // this is the identifier within the bezier element for that NURBS curve. Starts at 0
-							unsigned int elem_section = KV_section % xi_size;    // this is the identifier for the section within that bezier element.  Starts at 0
-							if (elem_section == 0) {
-								element++;
-								elem_section = xi_size - 2;     // the reason there is this -2 is because there is 1 fewer lines than there are xi points and need to subtact 1 for proper indexing
-							}
-							else
-								elem_section--;
-							// now that I know that stuff, I need determine what the parametric xi is which corresponds to the physical locations along the edge
-							// first I need to determine the length of the line between the beginning and end of the "half element"
-							vector<double> first_point(2, 0);
-							vector<double> second_point(2, 0);
-							first_point[0] = Elem_list[cur_nurb]->elem_Geom[element].xi_real_loc[elem_section][0];    // this is the x location for the first point
-							first_point[1] = Elem_list[cur_nurb]->elem_Geom[element].xi_real_loc[elem_section][1];    // this is the y location for the first point
-
-							second_point[0] = Elem_list[cur_nurb]->elem_Geom[element].xi_real_loc[elem_section + 1][0];    // this is the x location for the second point
-							second_point[1] = Elem_list[cur_nurb]->elem_Geom[element].xi_real_loc[elem_section + 1][1];    // this is the y location for the second point
-
-							double len = sqrt(pow(second_point[0] - first_point[0], 2) + pow(second_point[1] - first_point[1], 2));    // this is the linear length between the beginning and end of the "half element"
-
-							vector <double> temp(2, 0); // this is a variable I will use to write the value of the current control point location into
-							double temp_len = 0;
-							for (int k = 0; k < 4; k++) {     //////////////////////////////////////////////////////////  I MIGHT WANT TO CHANGE THIS LOOP SO IT ONLY DOES THE CORNER NODE (K = 0,4)
-								int node_index = global_edges[triangles[i]->global_side[side]][k];   // this will let me reference the correct node in the node list
-								temp[0] = node_list[node_index][0];
-								temp[1] = node_list[node_index][1];
-								temp_len = sqrt(pow(temp[0] - first_point[0], 2) + pow(temp[1] - first_point[1], 2));
-								temp_len = temp_len / len;
-								// now I need to add in the parametric value of the beginning of this section.
-								double begin_xi = Elem_list[cur_nurb]->xi_evals[elem_section];
-								double end_xi = Elem_list[cur_nurb]->xi_evals[elem_section + 1];
-								temp_len = ((end_xi - begin_xi) * temp_len) + begin_xi;   //  this is the value I need to evaluate the original bezier element at
-								temp = eval_Bez_elem(temp_len, element, cur_nurb);
-								// now I need to update the position of the node with in node_list
-								node_list[node_index] = temp;
-							}
-
-							found = true;
-						}
-						else {
-							KV_section -= Elem_list[cur_nurb]->n_el * (xi_size - 1);
-							cur_nurb++;
-						}
-					}
-				}
-			}
-
-		}
-	}
-
-
-
-
-}
 
 void nurb::smooth_weights(int degree)
 {

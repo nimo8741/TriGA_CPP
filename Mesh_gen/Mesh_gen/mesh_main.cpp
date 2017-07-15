@@ -31,12 +31,14 @@ int main(int argc, char*argv[]) {
 		degree = 3;   //default to order 3
 
 	action->readMsh(argv[1], degree);
+	action->create_side_nodes();
+	//action->display_mesh(argv[1]);
 
 	// Part 3 Smoothing and Degree Elevating the mesh
 	action->smoothMesh(degree);
 
 	// Part 4 Write output file to matlab to then be diplayed
-	action->create_xmsh(argv[1], degree);
+	action->display_mesh(argv[1]);
 
 	
 	return 0;

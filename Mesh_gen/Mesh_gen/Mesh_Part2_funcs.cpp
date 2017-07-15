@@ -177,10 +177,15 @@ a total of 10 points.
  
 **********************************************************************************/
 
-void nurb::readMsh(std::string filename, int degree)
+void nurb::readMsh(std::string filename, int msh_degree)
 {
+	// set the global mesh degree for later use
+	degree = msh_degree;
+	
 	// calculate the number of nodes which will be present in each triangle
 	nodes_in_triangle = ((degree + 2) * (degree + 1) >> 1);
+	
+	get_bary(degree);
 
 
 	ifstream infile;
@@ -330,102 +335,42 @@ void nurb::readMsh(std::string filename, int degree)
 
 		*/
 
-
+		vector<vector<double>> current_controlP;
 		vector<double> point(3, 1);     // this will set it so that the default weight for the nodes is 1
 		point[0] = node_list[node1][0];   // point 1
 		point[1] = node_list[node1][1];
 		current->controlP[0] = node1;
+		current_controlP.push_back(point);
+
 
 		point[0] = node_list[node2][0];   // point 2
 		point[1] = node_list[node2][1];
 		current->controlP[1] = node2;
+		current_controlP.push_back(point);
+
 
 		point[0] = node_list[node3][0];   // point 3
 		point[1] = node_list[node3][1];
 		current->controlP[2] = node3;
+		current_controlP.push_back(point);
 
-
-		// Now figure out all of the other points
-		int virtual_degree = degree;   // this virtual degree is the apparent degree of that level of the triangle this allows me to determine how many nodes need to be added in that level
-
-		int point1index = 0;
-		int point2index = 1;
-		int point3index = 2;
-
-		vector<double> point1 = node_list[current->controlP[point1index]]; // have a way to keep track of each of the three vertices of the virtual triangle
+		vector<double> point1 = node_list[current->controlP[0]]; // have a way to keep track of each of the three vertices of the virtual triangle
+		vector<double> point2 = node_list[current->controlP[1]];
+		vector<double> point3 = node_list[current->controlP[2]];
 		
-		vector<double> point2 = node_list[current->controlP[point2index]];
-		vector<double> point3 = node_list[current->controlP[point3index]];
 		
-		int nodes_added = 3;
 		
-		vector<vector<double>> current_controlP;
-		current_controlP.push_back(point1);
-		current_controlP.push_back(point2);
-		current_controlP.push_back(point3);
-
-		while (nodes_added < nodes_in_triangle) {
-			int nodes_inlevel_added = 3;
-			int nodes_inlevel = 3 * virtual_degree;
-			int nodes_on_side = 1;    // this will keep track of how many nodes I have added on the side
-			while (nodes_inlevel_added < nodes_inlevel) {  // for this I am in the same level
-
-				double coef1 = double(virtual_degree - (nodes_on_side % virtual_degree)) / double(virtual_degree);    // this is the coefficient which will be multiplied with the first point
-				double coef2 = double(nodes_on_side % virtual_degree) / double(virtual_degree);   // this is the coefficient which will be multiplied with the second point
-
-				if (nodes_inlevel_added < virtual_degree + 2) {   // then I am adding on side 1
-					point[0] = coef1 * point1[0] + coef2 * point2[0];
-					point[1] = coef1 * point1[1] + coef2 * point2[1];
-
-				}
-				else if (nodes_inlevel_added > ((virtual_degree << 1))) {   // this means I am added to side 3
-					point[0] = coef1 * point3[0] + coef2 * point1[0];
-					point[1] = coef1 * point3[1] + coef2 * point1[1];
-
-				}
-				else {
-					point[0] = coef1 * point2[0] + coef2 * point3[0];
-					point[1] = coef1 * point2[1] + coef2 * point3[1];
-				}
-				
-				current_controlP.push_back(point);
-				nodes_inlevel_added++;   // now update the information so that it will move onto the next point
-				nodes_added++;
-				nodes_on_side++;
-				if (nodes_on_side % virtual_degree == 0)
-					nodes_on_side = 1;
-			}
-			// now prepare the next level of the triangle
-			if (nodes_added < nodes_in_triangle) {
-
-				point1[0] = current_controlP[point3index + 1][0];  // I will need point1 regardless
-				point1[1] = current_controlP[point1index + nodes_inlevel - 1][1];
-
-				virtual_degree = virtual_degree - 3;
-				current_controlP.push_back(point1);
-				nodes_added++;
-
-
-				if (virtual_degree) {    // this means there is a triangle to add, if it doesn't hit this, it means that there is only a single node to add
-					point2[0] = current_controlP[point3index + 1 + virtual_degree][0];
-					point2[1] = current_controlP[point1index + nodes_inlevel - 1][1];
-					current_controlP.push_back(point2);
-
-					point3[0] = current_controlP[point3index + 1][0];
-					point3[1] = current_controlP[point1index + nodes_inlevel - 1 - virtual_degree][1];
-					current_controlP.push_back(point3);
-					nodes_added += 2;
-					point1index += nodes_inlevel;
-					point2index += nodes_inlevel;
-					point3index += nodes_inlevel;
-				}
-			}
+		for (int k = 3; k < nodes_in_triangle; k++) {    // start at 3 since I already have the first 3 points
+			point[0] = (bary_template[k][0] * point1[0]) + (bary_template[k][1] * point2[0]) + (bary_template[k][2] * point3[0]);
+			point[1] = (bary_template[k][0] * point1[1]) + (bary_template[k][1] * point2[1]) + (bary_template[k][2] * point3[1]);
+			current_controlP.push_back(point);
 		}
+
 
 		// now go back through and add all of the internal nodes to the node_list since they cannot be repeats
 		for (int j = 3 * degree; j < nodes_in_triangle; j++) {
 			node_list.push_back(current_controlP[j]);
-			current->controlP[j] = node_list.size() - 1;  
+			current->controlP[j] = int(node_list.size()) - 1;  
 
 		}
 
@@ -493,14 +438,14 @@ void nurb::readMsh(std::string filename, int degree)
 
 			for (int k = 3; k < degree + 2; k++) {
 				node_list.push_back(current_controlP[k]);
-				current->controlP[k] = node_list.size() - 1;
+				current->controlP[k] = int(node_list.size()) - 1;
 				temp[k - 2] = current->controlP[k];
 			}
 
 			// now add the indexes of these nodes into the global edges and global sides fields
 
 			global_edges.push_back(temp); // add this edge to the global list
-			current->global_side.push_back(global_edges.size() - 1);   // update the current element's edge parameter with the index of the global edge
+			current->global_side.push_back(int(global_edges.size()) - 1);   // update the current element's edge parameter with the index of the global edge
 
 		}
 		else {
@@ -509,8 +454,8 @@ void nurb::readMsh(std::string filename, int degree)
 				
 				for (int k = 3; k < degree + 2; k++) {
 					node_list.push_back(current_controlP[k]);
-					global_edges[edge1Found].insert(global_edges[edge1Found].begin() + 1, node_list.size() - 1);
-					current->controlP[k] = node_list.size() - 1;
+					global_edges[edge1Found].insert(global_edges[edge1Found].begin() + 1, int(node_list.size()) - 1);
+					current->controlP[k] = int(node_list.size()) - 1;
 				}
 			}
 			else {   // the global edge does contain the p - 1 interior points
@@ -542,11 +487,11 @@ void nurb::readMsh(std::string filename, int degree)
 
 			for (int k = degree + 2; k < 2*degree + 1; k++) {
 				node_list.push_back(current_controlP[k]);
-				current->controlP[k] = node_list.size() - 1;
+				current->controlP[k] = int(node_list.size()) - 1;
 				temp[k - degree - 1] = current->controlP[k];
 			}
 			global_edges.push_back(temp); // add this edge to the global list
-			current->global_side.push_back(global_edges.size() - 1);   // update the current element's edge parameter with the index of the global edge
+			current->global_side.push_back(int(global_edges.size()) - 1);   // update the current element's edge parameter with the index of the global edge
 
 		}
 		else {
@@ -555,8 +500,8 @@ void nurb::readMsh(std::string filename, int degree)
 
 				for (int k = degree + 2; k < 2*degree + 1; k++) {
 					node_list.push_back(current_controlP[k]);
-					global_edges[edge2Found].insert(global_edges[edge2Found].begin() + 1, node_list.size() - 1);
-					current->controlP[k] = node_list.size() - 1;
+					global_edges[edge2Found].insert(global_edges[edge2Found].begin() + 1, int(node_list.size()) - 1);
+					current->controlP[k] = int(node_list.size()) - 1;
 				}
 			}
 			else {
@@ -586,11 +531,11 @@ void nurb::readMsh(std::string filename, int degree)
 
 			for (int k = 2*degree + 1; k < 3 * degree; k++) {
 				node_list.push_back(current_controlP[k]);
-				current->controlP[k] = node_list.size() - 1;
+				current->controlP[k] = int(node_list.size()) - 1;
 				temp[k - degree - degree] = current->controlP[k];   // subtraction is faster than doing the multiplication of 2* degree
 			}
 			global_edges.push_back(temp); // add this edge to the global list
-			current->global_side.push_back(global_edges.size() - 1);   // update the current element's edge parameter with the index of the global edge
+			current->global_side.push_back(int(global_edges.size()) - 1);   // update the current element's edge parameter with the index of the global edge
 
 		}
 		else {
@@ -599,8 +544,8 @@ void nurb::readMsh(std::string filename, int degree)
 
 				for (int k = 2*degree + 1; k < 3 * degree; k++) {
 					node_list.push_back(current_controlP[k]);
-					global_edges[edge3Found].insert(global_edges[edge3Found].begin() + 1, node_list.size() - 1);
-					current->controlP[k] = node_list.size() - 1;
+					global_edges[edge3Found].insert(global_edges[edge3Found].begin() + 1, int(node_list.size()) - 1);
+					current->controlP[k] = int(node_list.size()) - 1;
 				}
 
 			}
@@ -625,3 +570,133 @@ void nurb::readMsh(std::string filename, int degree)
 
 }
 
+
+
+vector<double> nurb::find_intersect(vector<double> line1p1, vector<double> line1p2, vector<double> line2p1, vector<double> line2p2)
+{
+	vector<double> intersect(2, 0);
+	double slope1, slope2;
+	if (line1p1[0] == line1p2[0]) { // there is an infinite slope since the two points lie on top of each other
+		intersect[0] = line1p1[0];
+		// now solve for the y coor
+		// the other one is gaurenteed to have a define slope since the two lines are guarenteed to intersect
+		slope2 = (line2p2[1] - line2p1[1]) / (line2p2[0] - line2p1[0]);
+		// now using the point-slope form of the equation for a line to find the y coor of the intersection
+		intersect[1] = slope2 * (intersect[0] - line2p1[0]) + line2p1[1];
+	}
+	else if (line2p1[0] == line2p2[0]) {  // line 2 is vertical so I need to rely on line 1
+		intersect[0] = line2p1[0];
+		slope1 = (line1p2[1] - line1p1[1]) / (line1p2[0] - line1p1[0]);
+		intersect[1] = slope1 * (intersect[0] - line1p1[0]) + line1p1[1];
+	}
+	else {  // now regular case where neither of the slopes are undefined
+		slope1 = (-1) * (line1p2[1] - line1p1[1]) / (line1p2[0] - line1p1[0]);  // I have the negative sign because when solving for intersection, I always need the negative of the slope
+		slope2 = (-1) * (line2p2[1] - line2p1[1]) / (line2p2[0] - line2p1[0]);
+		// now assemble the matrices for eigen to solve
+		Matrix2d A;
+		Vector2d B;
+		A << slope1, 1, slope2, 1;
+		B << line1p1[1] + slope1 * line1p1[0], line2p1[1] + slope2 * line2p1[0];
+		Vector2d x = A.colPivHouseholderQr().solve(B);    // solve the Ax = B problem
+		intersect[0] = x(0);
+		intersect[1] = x(1);
+
+	}
+
+
+	return intersect;
+}
+
+
+void nurb::get_bary(int degree)
+{
+	bary_template.resize(nodes_in_triangle);
+	vector<double> bary_row(3, 0);
+	for (int i = 0; i <= degree; i++) {
+		for (int j = 0; j <= (degree - i); j++) {
+			double s = double(i) / double(degree);
+			double r = double(j) / double(degree);
+			double t = 1 - s - r;
+
+			// now perform conditioning on s,t, and r
+			s  = (s * degree) + 0.5;
+			int i_s = (int) s;
+			s = (double)i_s;
+			s = s / double(degree);
+
+			t = (t * degree) + 0.5;
+			int i_t = (int)t;
+			t = (double)i_t;
+			t = t / double(degree);
+
+			r = (r * degree) + 0.5;
+			int i_r = (int)r;
+			r = (double)i_r;
+			r = r / double(degree);
+
+
+
+			bary_row[0] = t;
+			bary_row[1] = r;
+			bary_row[2] = s;
+			int index = ij_to_index(i, j, degree, bary_row);
+			bary_template[index] = bary_row;
+		}
+	}
+}
+
+int nurb::ij_to_index(int i, int j, int degree, vector<double> bary)
+{
+	// handle the case if it is the bounding vertices
+	if (bary[0] == 1)
+		return 0;
+	else if (bary[1] == 1)
+		return 1;
+	else if (bary[2] == 1)
+		return 2;
+
+	// handle the case if it is on the bounding edges
+
+	if (bary[0] == 0) { // this means it is on side 1
+		return degree + i + 1;
+	}
+	else if (bary[1] == 0) {  // this means it is on side 2
+		return (degree << 1) + (degree - i);
+	}
+	else if (bary[2] == 0) {     // this means it is on side 0
+		return j + 2;
+	}
+
+	// if it made it this far, it is an internal node
+	int nodes_checked = 3 * degree - 1;
+	while (nodes_checked < nodes_in_triangle) {
+		// set up the internal triangle by translating and changing the degree
+		i--;
+		j--;
+		int virtual_degree = degree - 3;
+		int nodes_in_level = ((virtual_degree + 1) * (virtual_degree + 2)) >> 1;
+
+		// check for the vertices first
+		if (i == 0 && j == 0)
+			return nodes_checked + 1;
+		else if (i == 0 && j == virtual_degree)
+			return nodes_checked + 2;
+		else if (i == virtual_degree && j == 0)
+			return nodes_checked + 3;
+
+		// now check for sides
+		if (i == 0) {   // this means it is on side 0
+			return nodes_checked + j + 3;
+		}
+		else if (j == 0) {   // this means it is on side 2
+			return nodes_checked + (virtual_degree - i) + (virtual_degree << 1) + 1;
+		}
+		else if (i + j == virtual_degree) {   // this means it is on side 1
+			return nodes_checked + virtual_degree + i + 2;
+		}
+		nodes_checked += 3 * virtual_degree;
+	}
+	return (-1);
+
+
+}

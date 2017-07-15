@@ -629,8 +629,8 @@ Bezier_handle * nurb::extraction1D(Geom_data *var)
 	Operator.setIdentity();
 
 
-	int a = var->p_deg + 1;
-	int b = a;
+	int a = var->p_deg;
+	int b = a + 1;
 	int n_el = 1;     // intialize the number of elements
 	int n = var->NCP;
 	int p = var->p_deg;
@@ -802,6 +802,7 @@ void nurb::get_P_and_W(Bezier_handle * Bez, Geom_data *var, vector<double> KV_ol
 		MatrixXd Bez_points;
 
 		Bez_points.resize(Bez->p + 1, 3);
+
 		Bez_points = Bez->Operator[i].transpose()*proj;
 
 		Bez_points.transposeInPlace();     // this is so it is essentially in row major order instead of column major
