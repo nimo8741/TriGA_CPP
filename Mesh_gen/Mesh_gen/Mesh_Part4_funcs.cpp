@@ -115,7 +115,7 @@ void nurb::display_mesh(string filename)
 	delete[] column1;
 	delete[] column2;
 	delete[] node_array;
-	engClose(mat_eng);
+	//engClose(mat_eng);
 }
 
 double** nurb::vec_to_array(vector<vector<double>> &vec, unsigned int rows)

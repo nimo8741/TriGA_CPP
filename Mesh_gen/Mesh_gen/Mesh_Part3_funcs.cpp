@@ -14,6 +14,7 @@
 #include <numeric>
 #include <list>
 #include <Eigen/Dense>
+#include <Eigen/SparseLU>
 
 using namespace std;
 using namespace Eigen;
@@ -22,14 +23,11 @@ void nurb::smoothMesh(int mesh_degree)
 {
 	organize_boundary();
 	split_and_extract();
-	assign_boundary_points();
 
-	//boundary_weights(degree);
-	// now I need to solve for the weights of all of the points]
+	// now I need to smooth the weights of all of the points
 	//smooth_weights(degree);
 
-	// now I need to solve the linear elasticity
-	//LE2D(degree);
+
 }
 
 void nurb::create_side_nodes()
@@ -121,7 +119,7 @@ void nurb::organize_boundary()
 	size_t size = tri_NURB_elem_section_side.size();
 	vector<int> work_around(size);
 	iota(begin(work_around), end(work_around), 0);
-	sort (work_around.begin(), work_around.end(), *this);
+	sort(work_around.begin(), work_around.end(), *this);
 	vector<vector<unsigned int>> temp(size);
 	for (unsigned int i = 0; i < size; i++) {
 		temp[i] = tri_NURB_elem_section_side[work_around[i]];
@@ -137,8 +135,6 @@ void nurb::organize_boundary()
 			int elem = tri_NURB_elem_section_side[count][2];
 
 			while (count < tri_NURB_elem_section_side.size() && tri_NURB_elem_section_side[count][2] == elem) {
-
-
 
 				int tri = tri_NURB_elem_section_side[count][0];
 				int side = tri_NURB_elem_section_side[count][4];
@@ -172,6 +168,8 @@ void nurb::organize_boundary()
 			}
 		}
 	}
+	// now organize bNodes to that it is an increasing list
+	sort(bNodes.begin(), bNodes.end());
 }
 
 bool nurb::operator()(int i, int j)
@@ -187,7 +185,7 @@ bool nurb::operator()(int i, int j)
 			return true;
 		else if (input2[2] < input1[2])
 			return false;
-		else{   // this means that the element indexes are the same
+		else {   // this means that the element indexes are the same
 			if (input2[3] > input1[3])
 				return true;
 			else if (input2[3] < input1[3])
@@ -272,7 +270,6 @@ void nurb::split_and_extract()
 
 }
 
-
 vector<double> nurb::determine_elem_split(int cur_nurb, int cur_elem)
 {
 	// tri_NURB_elem_section_side is already organized so that first everything is of the same curve, then the same element, then increasing section position
@@ -285,7 +282,7 @@ vector<double> nurb::determine_elem_split(int cur_nurb, int cur_elem)
 	vector<double> split_list;
 
 	unsigned int max_i = int(tri_NURB_elem_section_side.size());
-	while (unsigned (i) < max_i && tri_NURB_elem_section_side[i][2] == cur_elem && tri_NURB_elem_section_side[i][1] == cur_nurb) {
+	while (unsigned(i) < max_i && tri_NURB_elem_section_side[i][2] == cur_elem && tri_NURB_elem_section_side[i][1] == cur_nurb) {
 		// do Newton's method to find the exact parametric xi to split at
 		// need to figure out a way to make sure that second_point is actually the second point along the NURBS curve
 		vector<double> second_point;
@@ -370,12 +367,12 @@ void nurb::curve_refine(Bezier_handle * Bez, int cur_elem, vector<double> xi_to_
 	Bez->elem_Geom[cur_elem].controlP = Q;
 
 	// now I need to seperate the 1 element into multiple
-	
+
 	unsigned int i;
 	for (i = 0; i <= (xi_to_add.size() / Bez->p); i++) {
 
 		// first i need to erase p elements from the front of the current one
-		if (i){
+		if (i) {
 			for (int j = 0; j < (Bez->p); j++) {
 				Bez->elem_Geom[cur_elem + i].controlP.erase(Bez->elem_Geom[cur_elem + i].controlP.begin());
 			}
@@ -434,31 +431,37 @@ void nurb::curve_refine(Bezier_handle * Bez, int cur_elem, vector<double> xi_to_
 
 			if (j) {
 				//// so simply make a copy of the previous Operator
-				Bez->Operator.insert(Bez->Operator.begin() + cur_elem + j, Bez->Operator[cur_elem]);
+				if (cur_elem + j >= Bez->Operator.size())
+					Bez->Operator.push_back(Bez->Operator[cur_elem + j - 1]);
+				else
+					Bez->Operator.insert(Bez->Operator.begin() + cur_elem + j, Bez->Operator[cur_elem + j]);
 
 				// Now Update the master IEN array so it reflects the added control points.
 				vector<int> insert(Bez->p + 1, 0);  // this is the entry corresponding to the inserted point
 				vector<vector<int>> cur_IEN = Master_IEN.back();
-				insert[0] = cur_IEN[cur_elem][Bez->p];
+				insert[0] = cur_IEN[cur_elem + j - 1][Bez->p];
 				for (int i = 1; i < Bez->p + 1; i++) {
 					insert[i] = insert[i - 1] + 1;
 				}
-				cur_IEN.insert(cur_IEN.begin() + cur_elem + j, insert);
+				if (cur_elem + j >= cur_IEN.size())
+					cur_IEN.push_back(insert);
+				else
+					cur_IEN.insert(cur_IEN.begin() + cur_elem + j, insert);
 
-				for (int i = cur_elem + 2; i < Bez->n_el; i++) {
-					for (int j = 0; j < Bez->p + 1; j++) {
-						cur_IEN[i][j] += Bez->p;
+				for (int k = cur_elem + 1 + j; k < int(cur_IEN.size()); k++) {   
+					for (int m = 0; m < Bez->p + 1; m++) {
+						cur_IEN[k][m] += Bez->p;
 					}
 
 				}
 				Master_IEN.back() = cur_IEN;
 			}
-				// now I need to update the curve and edge lengths of these new elements
-				Geom_data *garbage = new Geom_data;    // just need one of these so it will be happy
-				vector<double> trash(1, 0);
-				evalBez(garbage, Bez, cur_elem + j, trash);
-				curve_len(Bez, cur_elem + j);
-				delete garbage;
+			// now I need to update the curve and edge lengths of these new elements
+			Geom_data *garbage = new Geom_data;    // just need one of these so it will be happy
+			vector<double> trash(1, 0);
+			evalBez(garbage, Bez, cur_elem + j, trash);
+			curve_len(Bez, cur_elem + j);
+			delete garbage;
 		}
 	}
 
@@ -480,7 +483,7 @@ void nurb::elevate_degree(Bezier_handle * Bez, int element)
 	}
 
 	Bez->elem_Geom[element].controlP = Pe;
-	
+
 	// now figure out what to make the degree
 	unsigned int min_p = int(Bez->elem_Geom[0].controlP.size()) - 1;
 	for (int i = 1; i < Bez->n_el; i++) {
@@ -491,41 +494,55 @@ void nurb::elevate_degree(Bezier_handle * Bez, int element)
 
 }
 
-void nurb::assign_boundary_points()
+vector<vector<double>> nurb::determine_dirichlet()
 {
+	vector<vector<double>> g(node_list.size(),vector<double>(3,0));
 	// loop through tri_NURB_elem_section_side
 	for (unsigned int i = 0; i < tri_NURB_elem_section_side.size(); i++) {
 
-		// loop through all of the points
-		for (int j = 0; j <= degree; j++){
-			// determine the correct value of the control point
+		int tri = tri_NURB_elem_section_side[i][0];
+		int nurb = tri_NURB_elem_section_side[i][1];
+		int elem = tri_NURB_elem_section_side[i][2];
+		int side = tri_NURB_elem_section_side[i][4];
+		int order = tri_NURB_elem_section_side[i][5];
 
-			int tri = tri_NURB_elem_section_side[i][0];
-			int nurb = tri_NURB_elem_section_side[i][1];
-			int elem = tri_NURB_elem_section_side[i][2];
-			int side = tri_NURB_elem_section_side[i][4];
+		// loop through all of the points except for the first point'
+		// since this list is in order and these curves will always form a closed loop, I can just do the last p points instead of all p+1 of them
+		for (int j = 1; j <= degree; j++) {
+			// determine the correct value of the control point
 			int node = node_side_index[side][j];
-			int order = tri_NURB_elem_section_side[i][5];
 
 			vector<double> actual_p(3, 0);
 			actual_p[0] = Elem_list[nurb]->elem_Geom[elem].controlP[j][0];
 			actual_p[1] = Elem_list[nurb]->elem_Geom[elem].controlP[j][1];
 			actual_p[2] = Elem_list[nurb]->elem_Geom[elem].controlP[j][2];
+			// now project the actual point
+			//actual_p[0] *= actual_p[2];
+			//actual_p[1] *= actual_p[2];
 
-			// determine which node index this is
-			int node_list_index = triangles[tri]->controlP[node];
+			vector<double> g_row(3, 0);
+			// fill g_row with the displacement dirichlet condition
+			// At this point, all of the the weights in the node_list will be 1
 
-
-			// update the list
-			if (order) // this is in the proper direction
-				node_list[node_list_index] = actual_p;
+			if (order) { // this is in the proper direction
+				// determine which node index this is
+				int node_list_index = triangles[tri]->controlP[node];
+				g_row[0] = actual_p[0] - node_list[node_list_index][0];
+				g_row[1] = actual_p[1] - node_list[node_list_index][1];
+				g_row[2] = actual_p[2] - node_list[node_list_index][2];
+				g[node_list_index] = g_row;
+			}
 			else {   // this is in the reverse direction
 				int rev_node = node_side_index[side][degree - j];
 				int rev_node_list_index = triangles[tri]->controlP[rev_node];
-				node_list[rev_node_list_index] = actual_p;
+				g_row[0] = actual_p[0] - node_list[rev_node_list_index][0];
+				g_row[1] = actual_p[1] - node_list[rev_node_list_index][1];
+				g_row[2] = actual_p[2] - node_list[rev_node_list_index][2];
+				g[rev_node_list_index] = g_row;
 			}
 		}
 	}
+	return g;
 }
 
 double nurb::newton_find_xi(int cur_nurb, int cur_elem, vector<double> second_point, double guess)
@@ -542,16 +559,34 @@ double nurb::newton_find_xi(int cur_nurb, int cur_elem, vector<double> second_po
 
 		vector<double> slope_vec(2, 0);
 		vector<double> act_loc(2, 0);
+		//double bez_der_tot = 0;
+		double bez_tot = 0;
+		vector<double> bez_part_der(p + 1, 0);
+		vector<double> bez_part(p + 1, 0);
+
 		for (int i = 0; i <= p; i++) {   // loop through all of the control point throughout the bezier element
 			vector<double> point = Elem_list[cur_nurb]->elem_Geom[cur_elem].controlP[i];
-			double bez_part_der = ((n_choose_k(p, i) * i * pow(guess, i - 1) * pow((1 - guess), (p - i))) + (n_choose_k(p, i) * pow(guess, i) * (i - p) * pow((1 - guess), (p - i - 1))));
-			double bez_part = n_choose_k(p, i) * pow(guess, i) * pow((1 - guess), (p - i));
-			slope_vec[0] = slope_vec[0] + point[0] * bez_part_der;
-			slope_vec[1] = slope_vec[1] + point[1] * bez_part_der;
-			act_loc[0] = act_loc[0] + point[0] * bez_part;
-			act_loc[1] = act_loc[1] + point[1] * bez_part;
 
+			bez_part_der[i] = ((n_choose_k(p, i) * i * pow(guess, i - 1) * pow((1 - guess), (p - i))) + (n_choose_k(p, i) * pow(guess, i) * (i - p) * pow((1 - guess), (p - i - 1))));
+			//bez_der_tot = bez_der_tot + (bez_part_der[i] * point[2]);
+
+			bez_part[i] = n_choose_k(p, i) * pow(guess, i) * pow((1 - guess), (p - i));
+			bez_tot = bez_tot + (bez_part[i] * point[2]);
 		}
+
+		for (int i = 0; i <= p; i++) {
+			vector<double> point = Elem_list[cur_nurb]->elem_Geom[cur_elem].controlP[i];
+
+			// deal with the weights
+			//bez_part_der[i] = (bez_part_der[i] * point[2]) / bez_der_tot;
+			bez_part[i] = (bez_part[i] * point[2]) / bez_tot;
+
+			slope_vec[0] = slope_vec[0] + point[0] * bez_part_der[i];
+			slope_vec[1] = slope_vec[1] + point[1] * bez_part_der[i];
+			act_loc[0] = act_loc[0] + point[0] * bez_part[i];
+			act_loc[1] = act_loc[1] + point[1] * bez_part[i];
+		}
+
 
 		// now determine what x(xi) - x_tilde is
 		error = sqrt(pow(act_loc[0] - second_point[0], 2) + pow(act_loc[1] - second_point[1], 2));  // this is just the distance formula
@@ -575,22 +610,18 @@ double nurb::n_choose_k(int n, int k)
 	return ans;
 }
 
-/*
+
 
 void nurb::smooth_weights(int degree)
 {
+	vector<vector<double>> g = determine_dirichlet();
+	// now solve the linear elasticity problem
+	LE2D(g);
 
 
 }
 
 
-
-
-
-////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////
-////  Deal with all of this stuff later//////////////////////
 vector<double> nurb::eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb)
 {
 	vector <double> num(2, 0);
@@ -610,7 +641,7 @@ vector<double> nurb::eval_Bez_elem(double xi_val, unsigned int element, unsigned
 	return num;
 }
 
-void nurb::LE2D(int degree)
+void nurb::LE2D(vector<vector<double>> g)
 {
 	// define the stiffness properties
 	double E = pow(10, 11);
@@ -623,23 +654,22 @@ void nurb::LE2D(int degree)
 		0, 0, mu;
 
 	// Mesh / Geometry Information
-	const unsigned int nel = triangles.size();					// This is the number of triangular elements
-	const unsigned int nen = 10;									// This is the number of nodes within each element
-	const unsigned int nNodes = node_list.size();					// This is the number of unique nodes throughout the mesh
-	const unsigned int nsd = 2;                                   // This is the number of spatial dimensions
-	const unsigned int ndof = nsd*(nNodes - bNodes.size());       // This is the number of degrees of freedom
+	const unsigned int nel = int(triangles.size());					// This is the number of triangular elements
+	const unsigned int nen = nodes_in_triangle;									// This is the number of nodes within each element
+	const unsigned int nNodes = int(node_list.size());					// This is the number of unique nodes throughout the mesh
+	const unsigned int nsd = 2;                                   // This is the number of spatial dimensions                          THIS WOULD NEED TO BE 3 FOR PROJECTED
+	const unsigned int ndof = nsd*(nNodes - int(bNodes.size()));       // This is the number of degrees of freedom
 	const unsigned int nedof = nen * nsd;							// This is the number of element-wise degrees of freedom
 
 																	// Initialize the global K and F matrices
-	MatrixXd K(ndof, ndof);
+	SparseMatrix<double, ColMajor> K(ndof, ndof);
 	K.setZero();
 	VectorXd F(ndof);
 	F.setZero();
 
 	// Now construct the ID array
 	unsigned int P = 0;                  ////////// LUKE HAS THIS AS A 1,   FIND OUT WHICH ONE LATER
-	MatrixXi ID(nsd, nNodes);
-	ID.setZero();
+	vector<vector<int>> ID(nNodes, vector<int>(nsd, -1));
 
 	for (unsigned int a = 0; a < nNodes; a++) {
 		////////// find if a exists with in bNodes   ///////////
@@ -653,21 +683,22 @@ void nurb::LE2D(int degree)
 		////////////////////////////////////////////////////////
 
 		if (found) {
-			ID(0, a) = 0;
-			ID(1, a) = 0;
+			ID[a][0] = -1;
+			ID[a][1] = -1;
 		}
 		else {
-			ID(0, a) = P;
-			ID(1, a) = P + 1;
+			ID[a][0] = P;
+			ID[a][1] = P + 1;
 			P += 2;
 		}
 	}
-
 	// Generate a Lookup table for the basis
-	evaluate_tri_basis(degree);
 
+	evaluate_tri_basis();
+	quadInfo info;
 	// now loop through all of the elements
 	for (unsigned int elem = 0; elem < triangles.size(); elem++) {
+
 		// set the local stiffness matrix to 0
 		MatrixXd k_loc(nedof, nedof);
 		k_loc.setZero();
@@ -676,19 +707,61 @@ void nurb::LE2D(int degree)
 		for (int q = 0; q < num_quad; q++) {
 			// construct the B matrix
 			MatrixXd B(3, nedof);
-			B.setZero();
 			tri_10_output fast = tri_10_fast(elem, q);
-			cout << "block of size 5x2" << endl;
-			for (unsigned int a = 0; a < nedof; a++) {
-
+			for (unsigned int a = 0; a < nen; a++) {
+				MatrixXd insert_mat(3, 2);
+				insert_mat << fast.dR_dx(a, 0), 0, 0, fast.dR_dx(a, 1), fast.dR_dx(a, 1), fast.dR_dx(a, 0);
+				B.block(0, nsd*a, 3, 2) = insert_mat;
 			}
-
+			fast.J_det = abs(fast.J_det);
+			k_loc = k_loc + info.weights[q]*B.transpose()*D*B*fast.J_det;
 		}
 
+		// assemble the local element stiffness amtrix to the global stiffness matrix
+		for (unsigned int a = 0; a < nen; a++) {
+			for (unsigned int b = 0; b < nen; b++) {
+				for (unsigned int i = 0; i < nsd; i++) {
+					for (unsigned int j = 0; j < nsd; j++) {
+						unsigned int p = a*nsd + i;
+						unsigned int q = b*nsd + j;
+						unsigned int Pa = ID[triangles[elem]->controlP[a]][i];
+						unsigned int Pb = ID[triangles[elem]->controlP[b]][j];
+
+
+						if (Pa != (-1) && Pb != (-1))
+							K.coeffRef(Pa, Pb) = K.coeffRef(Pa, Pb) + k_loc(p, q);
+						else if (Pa != (-1) && Pb == (-1)) {
+							F(Pa) = F(Pa) - (k_loc(p, q) * g[triangles[elem]->controlP[b]][j]);
+						}
+					}
+				}
+			}
+		}
 	}
+
+	// Solve the system
+	SparseLU<SparseMatrix<double>> solver;
+	K.makeCompressed();
+	solver.analyzePattern(K);
+	solver.factorize(K);
+	VectorXd d = solver.solve(F);   // this is a SparseLU solver
+	// now update the node list
+	for (unsigned int i = 0; i < nNodes; i++) {
+
+		int xidx = ID[i][0];
+		int yidx = ID[i][1];
+		if (xidx != (-1)) {
+			node_list[i][0] += d(xidx);
+			node_list[i][1] += d(yidx);
+		}
+		node_list[i][0] += g[i][0];
+		node_list[i][1] += g[i][1];
+		node_list[i][2] += g[i][2];
+	}
+
 }
 
-void nurb::evaluate_tri_basis(int degree)
+void nurb::evaluate_tri_basis()
 {
 	int n = 3;
 	quadInfo quad;
@@ -701,17 +774,6 @@ void nurb::evaluate_tri_basis(int degree)
 		1, 1, 1;
 	Vector3d B;
 	Vector3d bary;
-	MatrixXi tuples(degree, 3);
-	tuples << 3, 0, 0,
-		0, 3, 0,
-		0, 0, 3,
-		2, 1, 0,
-		1, 2, 0,
-		0, 2, 1,
-		0, 1, 2,
-		1, 0, 2,
-		2, 0, 1,
-		1, 1, 1;
 
 	for (int cur_point = 0; cur_point < num_quad; cur_point++) {    // This only goes up to 16 because there are only 16 quad points
 																	// now determine the barycentric coordinate
@@ -721,13 +783,14 @@ void nurb::evaluate_tri_basis(int degree)
 		double u = bary(0);
 		double v = bary(1);
 		double w = bary(2);
-		vector<double> temp(10, 0);   // this will hold each row of the tri_N before it is pushed back
+		vector<double> temp(nodes_in_triangle, 0);   // this will hold each row of the tri_N before it is pushed back
 		vector<vector<double>> temp_der;
 
-		for (int m = 0; m < 10; m++) {
-			int i = tuples(m, 0);
-			int j = tuples(m, 1);
-			int k = tuples(m, 2);
+		for (int m = 0; m < nodes_in_triangle; m++) {
+			int i = int(bary_template[m][0] * double(degree));
+			int j = int(bary_template[m][1] * double(degree));
+			int k = int(bary_template[m][2] * double(degree));
+
 
 			temp[m] = fast_fact[n] / (fast_fact[i] * fast_fact[j] * fast_fact[k])*pow(u, i)*pow(v, j)*pow(w, k);
 			vector <double> deriv(3, 0);
@@ -745,152 +808,141 @@ void nurb::evaluate_tri_basis(int degree)
 		tri_dN_du.push_back(temp_der);
 	}
 }
-*/
 
+tri_10_output nurb::tri_10_fast(unsigned int tri, int q)
+{
+	// testing for the first time it enters this function
+	/*node_list[60][0] = -4;
+	node_list[60][1] = -4;
+	
+	node_list[65][0] = -2;
+	node_list[65][1] = -4;
 
-//tri_10_output nurb::tri_10_fast(unsigned int elem, int q)
-//{
+	node_list[84][0] = -2.691889926396950;
+	node_list[84][1] = -2.691889926396950;
 
-	/*// testing these are the same nodes as for the first call to tri10fast with plateandhole
-	triangles[elem]->controlP[0][0] = -4.00000;
-	triangles[elem]->controlP[0][1] = -4.00000;
-	triangles[elem]->controlP[1][0] = -2.00000;
-	triangles[elem]->controlP[1][1] = -4.00000;
-	triangles[elem]->controlP[2][0] = -2.6919;
-	triangles[elem]->controlP[2][1] = -2.6919;
-	triangles[elem]->controlP[3][0] = -3.3333;
-	triangles[elem]->controlP[3][1] = -4.0000;
-	triangles[elem]->controlP[4][0] = -2.6667;
-	triangles[elem]->controlP[4][1] = -4.0000;
-	triangles[elem]->controlP[5][0] = -2.2306;
-	triangles[elem]->controlP[5][1] = -3.5640;
-	triangles[elem]->controlP[6][0] = -2.4613;
-	triangles[elem]->controlP[6][1] = -3.1279;
-	triangles[elem]->controlP[7][0] = -3.1279;
-	triangles[elem]->controlP[7][1] = -3.1279;
-	triangles[elem]->controlP[8][0] = -3.5640;
-	triangles[elem]->controlP[8][1] = -3.5640;
-	triangles[elem]->controlP[9][0] = -2.8973;
-	triangles[elem]->controlP[9][1] = -3.5640;
+	node_list[165][0] = -3.333333333333330;
+	node_list[165][1] = -4;
 
+	node_list[166][0] = -2.666666666666670;
+	node_list[166][1] = -4;
+
+	node_list[167][0] = -2.230629975465650;
+	node_list[167][1] = -3.563963308798980;
+
+	node_list[168][0] = -2.461259950931300;
+	node_list[168][1] = -3.127926617597970;
+
+	node_list[169][0] = -3.127926617597970;
+	node_list[169][1] = -3.127926617597970;
+
+	node_list[170][0] = -3.563963308798980;
+	node_list[170][1] = -3.563963308798980;
+
+	node_list[164][0] = -2.897296642132320;
+	node_list[164][1] = -3.563963308798980;
 	*/
-	/*
-
-		unsigned int nen = tri_N[0].size();
-		tri_10_output output;   // create instance of struct I will eventually return
-		output.R.resize(nen);
-
-		MatrixXd dR_du(nen, 3);
-		dR_du.setZero();
-		// to save on loop unrolling I will hard code all of this out.
-		// the next three variables are the sums of tri_dN_du along each of the second dimensions.
-		// this is equivilent to
-		// dN_du(:,1)'*node(:,3) in line 59 of tri10fast of Luke's Matlab code
-		double dN_du0_sum = tri_dN_du[q][0][0]
-			+ tri_dN_du[q][1][0]
-			+ tri_dN_du[q][2][0]
-			+ tri_dN_du[q][3][0]
-			+ tri_dN_du[q][4][0]
-			+ tri_dN_du[q][5][0]
-			+ tri_dN_du[q][6][0]
-			+ tri_dN_du[q][7][0]
-			+ tri_dN_du[q][8][0]
-			+ tri_dN_du[q][9][0];
-
-		double dN_du1_sum = tri_dN_du[q][0][1]
-			+ tri_dN_du[q][1][1]
-			+ tri_dN_du[q][2][1]
-			+ tri_dN_du[q][3][1]
-			+ tri_dN_du[q][4][1]
-			+ tri_dN_du[q][5][1]
-			+ tri_dN_du[q][6][1]
-			+ tri_dN_du[q][7][1]
-			+ tri_dN_du[q][8][1]
-			+ tri_dN_du[q][9][1];
-
-		double dN_du2_sum = tri_dN_du[q][0][2]
-			+ tri_dN_du[q][1][2]
-			+ tri_dN_du[q][2][2]
-			+ tri_dN_du[q][3][2]
-			+ tri_dN_du[q][4][2]
-			+ tri_dN_du[q][5][2]
-			+ tri_dN_du[q][6][2]
-			+ tri_dN_du[q][7][2]
-			+ tri_dN_du[q][8][2]
-			+ tri_dN_du[q][9][2];
-
-		vector<double>num(2, 0.0);
-		double den = 0.0;
-
-		for (unsigned int i = 0; i < nen; i++) {
-			output.R[i] = tri_N[q][i];
-
-			dR_du(i, 0) = tri_dN_du[q][i][0] - (dN_du0_sum * tri_N[q][i]);
-			dR_du(i, 1) = tri_dN_du[q][i][1] - (dN_du1_sum * tri_N[q][i]);
-			dR_du(i, 2) = tri_dN_du[q][i][2] - (dN_du2_sum * tri_N[q][i]);
-
-			num[0] += tri_N[q][i] * triangles[elem]->controlP[i][0];
-			num[1] += tri_N[q][i] * triangles[elem]->controlP[i][1];
-			den += tri_N[q][i];
-
-		}
-		num[0] = num[0] / den;
-		num[1] = num[1] / den;
-		output.x = num;
-
-		//////////////////////////////////////////////////////////
-		// now Chain rule to find the derivative with respect to cartesian isoparametric coordinates
-		MatrixXd du_dxi(3, 2);
-		du_dxi << -1, -1,
-			1, 0,
-			0, 1;
-
-		MatrixXd dR_dxi = dR_du * du_dxi;
-		MatrixXd dN_du_mat = create_matrix(tri_dN_du[q]);
-		MatrixXd dN_dxi = dN_du_mat * du_dxi;
-
-		// now calculate the mapping from isoparametric space to physical space
-		Matrix2d g, gp, h, hp;
-		h.setConstant(1);
-		g.setZero();
-		gp.setZero();
-		hp.setZero();
-		for (int row = 0; row < 2; row++) {
-			for (int col = 0; col < 2; col++) {
-				for (unsigned int i = 0; i < nen; i++) {
-					g(row, col) += tri_N[q][i] * triangles[elem]->controlP[i][row];
-					gp(row, col) += dN_dxi(i, col) * triangles[elem]->controlP[i][row];
-					hp(row, col) += dN_dxi(i, col);
-				}
-			}
-		}
-		output.Jacob = (gp.array() * h.array()) - (g.array() * hp.array());      // determine the jacobian of the mapping
-		output.Jacob = output.Jacob.matrix();
-
-		MatrixXd temp(2, 2);
-		temp << output.Jacob.inverse();
-		output.dR_dx = dR_dxi * temp;
-		output.J_det = output.Jacob.determinant();
-
-		cout << output.dR_dx << endl << endl;
-		cout << output.Jacob << endl << endl;
-		cout << output.J_det << endl << endl;
 
 
-		return output;
+	unsigned int nen = int(tri_N[0].size());
+	tri_10_output output;   // create instance of struct I will eventually return
+	output.R.resize(nen);
+
+	MatrixXd dR_du(nen, 3);
+	dR_du.setZero();
+	
+
+	// figure out and what all of the summed variables are
+	// based on where I am in the program, I can ensure that "den" from Luke's code will always be 1
+	// also, all of the weights will be 1 as well
+	double dN_du0_sum = 0.0;
+	double dN_du1_sum = 0.0;
+	double dN_du2_sum = 0.0;
+
+
+
+
+	for (unsigned int i = 0; i < nen; i++) {
+		dN_du0_sum += tri_dN_du[q][i][0];
+		dN_du1_sum += tri_dN_du[q][i][1];
+		dN_du2_sum += tri_dN_du[q][i][2];
+
 	}
 
-	MatrixXd nurb::create_matrix(std::vector<std::vector<double>> input)
-	{
-		unsigned first = input.size();
-		unsigned second = input[0].size();
-		MatrixXd output(first, second);
+	vector<double>num(3, 0.0);
+	double den = 0;
+	
+	for (unsigned int i = 0; i < nen; i++) {
+		output.R[i] = tri_N[q][i];
 
-		for (unsigned int i = 0; i < first; i++) {
-			for (unsigned int j = 0; j < second; j++) {
-				output(i, j) = input[i][j];
+		dR_du(i, 0) = tri_dN_du[q][i][0] - (dN_du0_sum * tri_N[q][i]);
+		dR_du(i, 1) = tri_dN_du[q][i][1] - (dN_du1_sum * tri_N[q][i]);
+		dR_du(i, 2) = tri_dN_du[q][i][2] - (dN_du2_sum * tri_N[q][i]);
+
+		num[0] += tri_N[q][i] * node_list[triangles[tri]->controlP[i]][0];
+		num[1] += tri_N[q][i] * node_list[triangles[tri]->controlP[i]][1];
+		num[2] += tri_N[q][i] * node_list[triangles[tri]->controlP[i]][2];
+		den += tri_N[q][i];
+
+	}
+	num[0] = num[0] / den;
+	num[1] = num[1] / den;
+	num[2] = num[2] / den;
+
+	output.x = num;
+
+	//////////////////////////////////////////////////////////
+	// now Chain rule to find the derivative with respect to cartesian isoparametric coordinates
+	MatrixXd du_dxi(3, 2);
+	du_dxi << -1, -1,
+		        1, 0,         // this might not be right if I need to go into projected space
+		        0, 1;
+
+	MatrixXd dR_dxi = dR_du * du_dxi;
+	MatrixXd dN_du_mat = create_matrix(tri_dN_du[q]);
+	MatrixXd dN_dxi = dN_du_mat * du_dxi;
+
+	// now calculate the mapping from isoparametric space to physical space
+	Matrix2d g, gp, h, hp;
+	h.setConstant(1);
+	g.setZero();
+	gp.setZero();
+	hp.setZero();
+	for (int row = 0; row < 2; row++) {
+		for (int col = 0; col < 2; col++) {
+			for (unsigned int i = 0; i < nen; i++) {
+				g(row, col) += tri_N[q][i] * node_list[triangles[tri]->controlP[i]][row];
+				gp(row, col) += dN_dxi(i, col) * node_list[triangles[tri]->controlP[i]][row];
+				hp(row, col) += dN_dxi(i, col);
 			}
 		}
-		return output;
 	}
-	*/
+	output.Jacob = (gp.array() * h.array()) - (g.array() * hp.array());      // determine the jacobian of the mapping
+	output.Jacob = output.Jacob.matrix();
+
+	MatrixXd temp(2, 2);
+	temp << output.Jacob.inverse();
+	output.dR_dx = dR_dxi * temp;
+	output.J_det = output.Jacob.determinant();
+
+	//cout << output.dR_dx << endl << endl;
+	//cout << output.Jacob << endl << endl;
+	//cout << output.J_det << endl << endl;
+
+
+	return output;
+}
+
+MatrixXd nurb::create_matrix(std::vector<std::vector<double>> input)
+{
+	unsigned first = unsigned int(input.size());
+	unsigned second = unsigned int(input[0].size());
+	MatrixXd output(first, second);
+
+	for (unsigned int i = 0; i < first; i++) {
+		for (unsigned int j = 0; j < second; j++) {
+			output(i, j) = input[i][j];
+		}
+	}
+	return output;
+}

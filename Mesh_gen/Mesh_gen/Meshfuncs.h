@@ -70,6 +70,7 @@ struct quadInfo {
 	                                      // this contains the weighting information
 };
 
+
 struct tri_10_output {
 	std::vector<double> R;                    // this is the evaluation of the basis function evaluated at the desired locations
 	Eigen::MatrixXd dR_dx;   // this is the array containing the [dR_dx, dR_dy] derivatives for each desired location
@@ -99,6 +100,10 @@ class nurb{
 		void get_P_and_W(Bezier_handle *Bez, Geom_data *var, std::vector<double> KV_old);
 		std::vector<std::vector<int>> IEN(int n, int p, std::vector<double> Xi,int n_el);
 		void subdivide_element(Bezier_handle *Bez, int e_index);
+		void shape_refine(Bezier_handle * Bez);
+		double get_kurv(Bezier_handle * Bez, int elem, double xi);
+		void cusp_detection(Bezier_handle * Bez);
+		std::vector<double> get_deriv(Bezier_handle * Bez, int elem, double xi);
 
 
 
@@ -120,19 +125,17 @@ class nurb{
 		std::vector<double> determine_elem_split(int cur_nurb, int cur_elem);
 		void curve_refine(Bezier_handle * Bez, int cur_elem, std::vector<double> xi_to_add, bool part1);
 		void elevate_degree(Bezier_handle * Bez, int element);
-		void assign_boundary_points();
+		std::vector<std::vector<double>> determine_dirichlet();
 		double newton_find_xi(int cur_nurb, int cur_elem, std::vector<double> second_point, double guess);
 		double n_choose_k(int n, int k);
-		//void boundary_weights(int degree);
-		//void refine_and_elevate(int degree, std::vector<double> xi_list, );
 
-		//void adjust_boundary_deg3();
-		//std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
-		//void LE2D(int degree);
-		//void evaluate_tri_basis(int degree);
-		//tri_10_output tri_10_fast(unsigned int elem, int q);
+		void smooth_weights(int degree);
+		std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
+		void LE2D(std::vector<std::vector<double>> g);
+		void evaluate_tri_basis();
+		tri_10_output tri_10_fast(unsigned int elem, int q);
 
-		//Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
+		Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
 
 
 		// Part 4: Write the mesh to a .xmsh file to be read in by matlab and displayed
@@ -158,7 +161,7 @@ class nurb{
 		std::vector<std::vector <double>> node_list;
 		std::vector<int> bNodes;    // this is a list of all of the boundary nodes
 		int phy_groups;     // This is a value which keeps track of how many boundary line segments there are.  It is 1 larger than that since the last physical group is the internal domain of interest
-		std::vector<std::vector<double>> tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the 10 basis functions
+		std::vector<std::vector<double>> tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the basis functions
 	    std::vector<std::vector<std::vector<double>>> tri_dN_du;
 		// this is the 3D array containing the parametric derivative information.  The first dimension is the 16 evaluation points, the second are the 10 basis functions, and the third is each of the 3 directions of derivatives.
 		
@@ -166,7 +169,7 @@ class nurb{
 		int nodes_in_triangle;
 		std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, and the section of the element
 		std::vector<std::vector<int>> node_side_index;
-		std::vector<std::vector<double>> bary_template;     // this is the bary centric coordinates of all of the non vertex point of the triangular element
+		std::vector<std::vector<double>> bary_template;     // this is the bary centric coordinates of all of the points of the triangular element
 
 
 

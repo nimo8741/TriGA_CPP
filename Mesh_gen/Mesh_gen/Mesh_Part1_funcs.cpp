@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <numeric>
+#include <functional>
 #include <Eigen/Dense>
 
 using namespace std;
@@ -399,7 +401,7 @@ means it does not contain a number
 
 bool nurb::hasnumber(string line) {
 	bool num = false;
-	int line_len = line.length();
+	int line_len = int(line.length());
 	for (int i = 0; i < line_len; i++) {
 		if (isdigit(line[i])) {
 			num = true;
@@ -460,6 +462,11 @@ void nurb::NURBS2poly(Geom_data * var)
 					i++;    // so I don't subdivide the same element again
 
 				}
+				if (head->elem_Geom[i].controlP[0].size() != 3) {   // if no curve refinement was needed, we still need to make it so that the control point have size 3
+					for (int m = 0; m <= head->p; m++) {
+						head->elem_Geom[i].controlP[m].push_back(head->elem_Geom[i].weight[m]);
+					}
+				}
 			}
 
 			// determine if any splits occured
@@ -469,6 +476,11 @@ void nurb::NURBS2poly(Geom_data * var)
 				break;
 
 		}
+
+		// now go through and perform a element refine which is based on the geometry of the curve.  This will enhance the resolution where there
+		// is high changes in slope or changes in curvature.
+		cusp_detection(head);
+		shape_refine(head);
 
 		var = var->next;
 	}
@@ -778,7 +790,7 @@ that the function didn't do anything since there is already data.
 void nurb::get_P_and_W(Bezier_handle * Bez, Geom_data *var, vector<double> KV_old)
 {
 	// First pull off the current IEN array
-	int n = KV_old.size() - (Bez->p + 1);
+	int n = int(KV_old.size()) - (Bez->p + 1);
 	vector <vector <int>> IEN_cur = IEN(n, Bez->p, KV_old,Bez->n_el);
 
 	// Next construct the projected control points into the matrix data type
@@ -897,7 +909,7 @@ void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
 	for (int added_points = 0; added_points < Bez->p; added_points++) {  // loop through all of the points that need to be added
 		// first determine the length variable m
 
-		int m = Bez->elem_Geom[e_index].controlP.size() + 1;    // m is the number of control points after I add one the new one
+		int m = int(Bez->elem_Geom[e_index].controlP.size()) + 1;    // m is the number of control points after I add one the new one
 		int k = Bez->p + 1;      // this is the location of the added point
 		vector<vector<double>> Q(m, vector<double>(2, 0.0));
 		vector<double> W(m, 0);
@@ -1011,7 +1023,6 @@ void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
 	delete garbage;
 }
 
-
 /**********************************************************************************
 Function prototype:
 void nurb::refine_Xi(Geom_data *var)
@@ -1045,7 +1056,7 @@ void nurb::refine_Xi(Geom_data * var)
 		unsigned int need = var->p_deg - amount_cur;
 		if (i == Xi.size() - 1) {
 			var->KV = Xi;
-			var->LKV = Xi.size();
+			var->LKV = int(Xi.size());
 			var->NCP = var->LKV - (var->p_deg + 1);
 			return;
 		}
@@ -1057,4 +1068,312 @@ void nurb::refine_Xi(Geom_data * var)
 	}
 }
 
+void nurb::shape_refine(Bezier_handle * Bez)
+{
+	vector<pair<double, int>> kurvy_thing;
+	int count = 0;
+	for (int i = 0; i < Bez->n_el; i++) {    // loop through all of the elements in the curve
+		// now find the curvature at 4 equispaced points within the element
+		for (int j = 0; j < 4; j++) {
+			double kurv = get_kurv(Bez, i, double(j + 1) / 5);
+			kurvy_thing.push_back(make_pair(kurv, count));
+			count++;
+		}
+	}
+	// now find the median value
+	sort(kurvy_thing.begin(), kurvy_thing.end());
+	int index = (int(kurvy_thing.size()) / 2) - 1;
 
+	// now make a list of all of the indexes that need splitting
+	vector<int> split_index;
+	for (int i = index + 1; i < int(kurvy_thing.size()); i++) {
+		if (kurvy_thing[i].first > (10 * kurvy_thing[index].first) + 1)
+			split_index.push_back(kurvy_thing[i].second);
+	}
+	sort(split_index.begin(), split_index.end());
+	int cur_elem;
+	vector<double> xi_to_add;
+	vector<double> xi_choices(4, 0);
+	xi_choices[0] = 0.2;
+	xi_choices[1] = 0.4;
+	xi_choices[2] = 0.6;
+	xi_choices[3] = 0.8;
+
+
+	for (int i = 0; i < int(split_index.size()); i++) {
+		if (xi_to_add.size() == 0) { // there is nothing in here so I can just add the next one
+			cur_elem = split_index[i] / 4;
+			double val = xi_choices[split_index[i] % 4];
+			for (int j = 0; j < Bez->p; j++)
+				xi_to_add.push_back(val);
+		}
+		else {
+			if ((split_index[i] / 4) != cur_elem) {  // the xi_to_add is full so I need to split up the Bezier element
+				curve_refine(Bez, cur_elem, xi_to_add, true);
+				int num_add = int(xi_to_add.size());
+				// now I need to update the rest of split list
+				for (int j = i; j < int(split_index.size()); j++) {
+					split_index[j] += 4 * (num_add / Bez->p);
+
+				}
+				xi_to_add.clear();
+				i--;
+			}
+			else {  // this means that we are still in the current element so I can just add the next point in
+				double val = xi_choices[split_index[i] % 4];
+				for (int j = 0; j < Bez->p; j++)
+					xi_to_add.push_back(val);
+
+			}
+		}
+
+	}
+	if (xi_to_add.size())  // handle the last case if there are ones to do
+		curve_refine(Bez, cur_elem, xi_to_add, true);   // take care of the last one
+
+
+}
+
+double nurb::get_kurv(Bezier_handle * Bez, int elem, double xi)
+{
+	if (Bez->p < 2)
+		return 0;
+	// start with figuring out the n-2 ones
+	int k = Bez->p - 2;
+	vector<double> p0n2(2, 0);
+	vector<double> p1n2(2, 0);
+	vector<double> p2n2(2, 0);
+	double w0n2 = 0.0;
+	double w1n2 = 0.0;
+	double w2n2 = 0.0;
+
+	for (int j = 0; j <= k; j++) {
+		double B = n_choose_k(k, j) * pow(xi, j) * pow(1 - xi, k - j);
+		p0n2[0] = p0n2[0] + B * Bez->elem_Geom[elem].controlP[j][0] * Bez->elem_Geom[elem].controlP[j][2];
+		p0n2[1] = p0n2[1] + B * Bez->elem_Geom[elem].controlP[j][1] * Bez->elem_Geom[elem].controlP[j][2];
+		p1n2[0] = p1n2[0] + B * Bez->elem_Geom[elem].controlP[j + 1][0] * Bez->elem_Geom[elem].controlP[j + 1][2];
+		p1n2[1] = p1n2[1] + B * Bez->elem_Geom[elem].controlP[j + 1][1] * Bez->elem_Geom[elem].controlP[j + 1][2];
+		p2n2[0] = p2n2[0] + B * Bez->elem_Geom[elem].controlP[j + 2][0] * Bez->elem_Geom[elem].controlP[j + 2][2];
+		p2n2[1] = p2n2[1] + B * Bez->elem_Geom[elem].controlP[j + 2][1] * Bez->elem_Geom[elem].controlP[j + 2][2];
+
+		w0n2 += B * Bez->elem_Geom[elem].controlP[j][2];
+		w1n2 += B * Bez->elem_Geom[elem].controlP[j + 1][2];
+		w2n2 += B * Bez->elem_Geom[elem].controlP[j + 2][2];
+	}
+	p0n2[0] = p0n2[0] / w0n2;
+	p0n2[1] = p0n2[1] / w0n2;
+
+	p1n2[0] = p1n2[0] / w1n2;
+	p1n2[1] = p1n2[1] / w1n2;
+
+	p2n2[0] = p2n2[0] / w2n2;
+	p2n2[1] = p2n2[1] / w2n2;
+	
+	// now do all of the n-1 ones
+	k++;
+	vector<double> p0n1(2, 0);
+	vector<double> p1n1(2, 0);
+	double w0n1 = 0.0;
+	double w1n1 = 0.0;
+
+	for (int j = 0; j <= k; j++) {
+		double B = n_choose_k(k, j) * pow(xi, j) * pow(1 - xi, k - j);
+		p0n1[0] += B * Bez->elem_Geom[elem].controlP[j][0] * Bez->elem_Geom[elem].controlP[j][2];
+		p0n1[1] += B * Bez->elem_Geom[elem].controlP[j][1] * Bez->elem_Geom[elem].controlP[j][2];
+		p1n1[0] += B * Bez->elem_Geom[elem].controlP[j + 1][0] * Bez->elem_Geom[elem].controlP[j + 1][2];
+		p1n1[1] += B * Bez->elem_Geom[elem].controlP[j + 1][1] * Bez->elem_Geom[elem].controlP[j + 1][2];
+
+		w0n1 += B * Bez->elem_Geom[elem].controlP[j][2];
+		w1n1 += B * Bez->elem_Geom[elem].controlP[j + 1][2];
+	}
+	p0n1[0] = p0n1[0] / w0n1;
+	p0n1[1] = p0n1[1] / w0n1;
+	p1n1[0] = p1n1[0] / w1n1;
+	p1n1[1] = p1n1[1] / w1n1;
+
+
+	// now do the n ones
+	k++;
+	double w0n0 = 0.0;
+	for (int j = 0; j <= k; j++) {
+		double B = n_choose_k(k, j) * pow(xi, j) * pow(1 - xi, k - j);
+		w0n0 += B * Bez->elem_Geom[elem].controlP[j][2];
+	}
+
+	// now prepare some variables to make the curvature formula easier
+	vector<double> left_cross(2, 0);
+	vector<double> right_cross(2, 0);
+	vector<double> bottom(2, 0);
+
+	left_cross[0] = p1n2[0] - p0n2[0];
+	left_cross[1] = p1n2[1] - p0n2[1];
+
+	right_cross[0] = p2n2[0] - p1n2[0];
+	right_cross[1] = p2n2[1] - p1n2[1];
+
+	bottom[0] = p1n1[0] - p0n1[0];
+	bottom[1] = p1n1[1] - p0n1[1];
+
+	double R1 = (w0n2 * w1n2 * w2n2 * pow(w0n0, 3)) / (pow(w0n1, 3) * pow(w1n1, 3));
+	double cross = abs((left_cross[0] * right_cross[1]) - (left_cross[1] * right_cross[0]));
+	double denom = pow(sqrt(pow(bottom[0], 2) + pow(bottom[1], 2)), 3);
+	double kurv = (double(k - 1) / double(k)) * R1 * cross / denom;
+	return kurv;
+
+}
+
+void nurb::cusp_detection(Bezier_handle * Bez)
+{
+	// I am going to do this by getting first derivative vectors at xi = 0.01 and 0.99 for each element
+	// and then determining the turning angle between each inter-element pair.
+	// Then I will have the number of inserted knots depending on where it is between 100 and 180 degrees
+	vector<vector<double>> derivs;
+	for (int i = 0; i < Bez->n_el; i++) {
+		derivs.push_back(get_deriv(Bez, i, 0.001));
+		derivs.push_back(get_deriv(Bez, i, 0.999));
+	}
+	// now I need to move the 0th entry to be the last entry so that it is next to its pair
+	derivs.push_back(derivs[0]);
+	// now I need to erase the 0th entry from the front of the list
+	derivs.erase(derivs.begin());
+
+	// now I need to compute the turning angle
+	vector<double> turning;
+	for (int i = 0; i < derivs.size(); i++) {  
+		double dot = (derivs[i][0] * derivs[i + 1][0]) + (derivs[i][1] * derivs[i + 1][1]); 
+		// I don't need the denominator because I already know that they are unit sized
+		turning.push_back(acos(dot) * 180 / 3.141592654);
+		i++;
+	}
+
+	// now I need to go back through the turning vector and refine the curve depending on the size of its turning angle
+	for (int i = 0; i < turning.size(); i++) {
+		if (turning[i] > 100) {  // then I am calling it a cusp
+			vector<double> xi_to_add;
+
+			int second_index = i + 1;
+			if (i == turning.size() - 1)   // reconcile that fact that I moved the first entry in turning to be the last one
+				second_index = 0;
+
+			if (turning[i] < 130) {  // it is between 100 and 130
+				for (int j = 0; j < Bez->p; j++)
+					xi_to_add.push_back(0.5);
+				curve_refine(Bez, i, xi_to_add, true);
+				if (second_index)
+					second_index++;
+				curve_refine(Bez, second_index, xi_to_add, true);
+			}
+			else if (turning[i] < 145) {  // it is between 130 and 145
+				for (int j = 0; j <= Bez->p; j++) {
+					xi_to_add.push_back(1.0 / 3.0);
+					xi_to_add.push_back(2.0 / 3.0);
+				}
+				sort(xi_to_add.begin(), xi_to_add.end());
+				curve_refine(Bez, i, xi_to_add, true);
+				if (second_index)
+					second_index += 2;
+				curve_refine(Bez, second_index, xi_to_add, true);
+			}
+			else if (turning[i] < 155) {  // it is between 145 and 155
+				for (int j = 0; j < Bez->p; j++) {
+					xi_to_add.push_back(1.0 / 4.0);
+					xi_to_add.push_back(2.0 / 4.0);
+					xi_to_add.push_back(3.0 / 4.0);
+				}
+				sort(xi_to_add.begin(), xi_to_add.end());
+				curve_refine(Bez, i, xi_to_add, true);
+				if (second_index)
+					second_index += 3;
+				curve_refine(Bez, second_index, xi_to_add, true);
+			}
+			else if (turning[i] < 165) {  // it is between 155 and 165
+				for (int j = 0; j < Bez->p; j++) {
+					xi_to_add.push_back(1.0 / 5.0);
+					xi_to_add.push_back(2.0 / 5.0);
+					xi_to_add.push_back(3.0 / 5.0);
+					xi_to_add.push_back(4.0 / 5.0);
+				}
+				sort(xi_to_add.begin(), xi_to_add.end());
+				curve_refine(Bez, i, xi_to_add, true);
+				if (second_index)
+					second_index += 4;
+				curve_refine(Bez, second_index, xi_to_add, true);
+			}
+			else if (turning[i] < 175) {  // it is between 165 and 175
+				for (int j = 0; j < Bez->p; j++) {
+					xi_to_add.push_back(1.0 / 6.0);
+					xi_to_add.push_back(2.0 / 6.0);
+					xi_to_add.push_back(3.0 / 6.0);
+					xi_to_add.push_back(4.0 / 6.0);
+					xi_to_add.push_back(5.0 / 6.0);
+				}
+				sort(xi_to_add.begin(), xi_to_add.end());
+				curve_refine(Bez, i, xi_to_add, true);
+				if (second_index)
+					second_index += 5;
+				curve_refine(Bez, second_index + 5, xi_to_add, true);
+			}
+			else if (turning[i] < 180) {   // this could essentially be an else statement as the angle will never be more than 180
+				for (int j = 0; j < Bez->p; j++) {
+					xi_to_add.push_back(1.0 / 7.0);
+					xi_to_add.push_back(2.0 / 7.0);
+					xi_to_add.push_back(3.0 / 7.0);
+					xi_to_add.push_back(4.0 / 7.0);
+					xi_to_add.push_back(5.0 / 7.0);
+					xi_to_add.push_back(6.0 / 7.0);
+				}
+				sort(xi_to_add.begin(), xi_to_add.end());
+				curve_refine(Bez, i, xi_to_add, true);
+				if (second_index)
+					second_index += 6;
+				curve_refine(Bez, second_index, xi_to_add, true);
+
+			}
+		}
+	}
+}
+
+vector<double> nurb::get_deriv(Bezier_handle * Bez, int elem, double xi)
+{
+	vector<double> result(2, 0);
+
+	// start with figuring out the n-1 ones
+	int k = Bez->p - 1;
+	vector<double> p0n1(2, 0);
+	vector<double> p1n1(2, 0);
+	double w0n1 = 0.0;
+	double w1n1 = 0.0;
+
+	for (int j = 0; j <= k; j++) {
+		double B = n_choose_k(k, j) * pow(xi, j) * pow(1 - xi, k - j);
+		p0n1[0] += B * Bez->elem_Geom[elem].controlP[j][0] * Bez->elem_Geom[elem].controlP[j][2];
+		p0n1[1] += B * Bez->elem_Geom[elem].controlP[j][1] * Bez->elem_Geom[elem].controlP[j][2];
+		p1n1[0] += B * Bez->elem_Geom[elem].controlP[j + 1][0] * Bez->elem_Geom[elem].controlP[j + 1][2];
+		p1n1[1] += B * Bez->elem_Geom[elem].controlP[j + 1][1] * Bez->elem_Geom[elem].controlP[j + 1][2];
+
+		w0n1 += B * Bez->elem_Geom[elem].controlP[j][2];
+		w1n1 += B * Bez->elem_Geom[elem].controlP[j + 1][2];
+	}
+	p0n1[0] = p0n1[0] / w0n1;
+	p0n1[1] = p0n1[1] / w0n1;
+	p1n1[0] = p1n1[0] / w1n1;
+	p1n1[1] = p1n1[1] / w1n1;
+
+
+	// now do the n ones
+	k++;
+	double w0n0 = 0.0;
+	for (int j = 0; j <= k; j++) {
+		double B = n_choose_k(k, j) * pow(xi, j) * pow(1 - xi, k - j);
+		w0n0 += B * Bez->elem_Geom[elem].controlP[j][2];
+	}
+
+	result[0] = k * (w0n1 * w1n1 / pow(w0n0, 2)) * (p1n1[0] - p0n1[0]);
+	result[1] = k * (w0n1 * w1n1 / pow(w0n0, 2)) * (p1n1[1] - p0n1[1]);
+
+	double abs_result = sqrt(pow(result[0], 2) + pow(result[1], 2));
+
+	result[0] = result[0] / abs_result;
+	result[1] = result[1] / abs_result;
+	return result;
+}
