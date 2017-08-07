@@ -70,6 +70,24 @@ struct quadInfo {
 	                                      // this contains the weighting information
 };
 
+struct quadInfo28 {
+	double quadP[28][2] = 
+	{
+		{ 0.333333333333333,   0.333333333333333 },{ 0.948021718143423,   0.025989140928288 },{ 0.025989140928288,   0.948021718143423 },{ 0.025989140928288,   0.025989140928288 },
+		{ 0.811424994704155,   0.094287502647923 },{ 0.094287502647923,   0.811424994704155 },{ 0.094287502647923,   0.094287502647923 },{ 0.010726449965571,   0.494636775017215 },
+		{ 0.494636775017215,   0.010726449965571 },{ 0.494636775017215,   0.494636775017215 },{ 0.585313234770972,   0.207343382614514 },{ 0.207343382614514,   0.585313234770972 },
+		{ 0.207343382614514,   0.207343382614514 },{ 0.122184388599019,   0.438907805700491 },{ 0.438907805700491,   0.122184388599019 },{ 0.438907805700491,   0.438907805700491 },
+		{ 0.677937654882590,   0.044841677589131 },{ 0.677937654882590,   0.277220667528279 },{ 0.044841677589131,   0.677937654882590 },{ 0.044841677589131,   0.277220667528279 },
+		{ 0.277220667528279,   0.677937654882590 },{ 0.277220667528279,   0.044841677589131 },{ 0.858870281282636,                   0 },{ 0.858870281282636,   0.141129718717364 },
+		{ 0,                   0.858870281282636 },{ 0,                   0.141129718717364 },{ 0.141129718717364,   0.858870281282636 },{ 0.141129718717364,                   0 }
+	};
+
+	double weights[28] = { 0.043988650581111, 0.004372155776868, 0.004372155776868, 0.004372155776868, 0.019040785996968, 0.019040785996968, 0.019040785996968,
+						   0.009427724028066, 0.009427724028066, 0.009427724028066, 0.036079848772370, 0.036079848772370, 0.036079848772370, 0.034664569352769, 
+						   0.034664569352769, 0.034664569352769, 0.020528157714644, 0.020528157714644, 0.020528157714644, 0.020528157714644, 0.020528157714644,
+						   0.020528157714644, 0.003681191891650, 0.003681191891650, 0.003681191891650, 0.003681191891650, 0.003681191891650, 0.003681191891650 };
+};
+
 
 struct tri_10_output {
 	std::vector<double> R;                    // this is the evaluation of the basis function evaluated at the desired locations
@@ -130,16 +148,17 @@ class nurb{
 		double n_choose_k(int n, int k);
 
 		void smooth_weights(int degree);
+		void solve_laplacian(std::vector<std::vector<double>> g);
 		std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
 		void LE2D(std::vector<std::vector<double>> g);
-		void evaluate_tri_basis();
+		void evaluate_tri_basis(int q_points);
 		tri_10_output tri_10_fast(unsigned int elem, int q);
 
 		Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
 
 
 		// Part 4: Write the mesh to a .xmsh file to be read in by matlab and displayed
-		//void create_xmsh(std::string filename, int degree);
+		void create_xmsh(std::string filename, int degree);
 		void display_mesh(std::string filename);
 		double** vec_to_array(std::vector<std::vector<double>> &vec, unsigned int rows);
 
@@ -167,7 +186,8 @@ class nurb{
 		
 		int degree;
 		int nodes_in_triangle;
-		std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, and the section of the element
+		std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, the section of the element,
+		// the side of the element, and the order of the side (1 for the "correct" order and 0 for the reverse order)
 		std::vector<std::vector<int>> node_side_index;
 		std::vector<std::vector<double>> bary_template;     // this is the bary centric coordinates of all of the points of the triangular element
 

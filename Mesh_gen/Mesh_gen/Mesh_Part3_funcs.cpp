@@ -15,6 +15,7 @@
 #include <list>
 #include <Eigen/Dense>
 #include <Eigen/SparseLU>
+#include <Eigen/SparseCore>
 
 using namespace std;
 using namespace Eigen;
@@ -25,7 +26,7 @@ void nurb::smoothMesh(int mesh_degree)
 	split_and_extract();
 
 	// now I need to smooth the weights of all of the points
-	//smooth_weights(degree);
+	smooth_weights(degree);
 
 
 }
@@ -516,9 +517,7 @@ vector<vector<double>> nurb::determine_dirichlet()
 			actual_p[0] = Elem_list[nurb]->elem_Geom[elem].controlP[j][0];
 			actual_p[1] = Elem_list[nurb]->elem_Geom[elem].controlP[j][1];
 			actual_p[2] = Elem_list[nurb]->elem_Geom[elem].controlP[j][2];
-			// now project the actual point
-			//actual_p[0] *= actual_p[2];
-			//actual_p[1] *= actual_p[2];
+
 
 			vector<double> g_row(3, 0);
 			// fill g_row with the displacement dirichlet condition
@@ -610,17 +609,139 @@ double nurb::n_choose_k(int n, int k)
 	return ans;
 }
 
-
-
 void nurb::smooth_weights(int degree)
 {
+
 	vector<vector<double>> g = determine_dirichlet();
+
+	// first I need to smooth the weights by solving the laplacian
+	solve_laplacian(g);
+
 	// now solve the linear elasticity problem
 	LE2D(g);
 
 
 }
 
+void nurb::solve_laplacian(vector<vector<double>> g)
+{
+	// Declare the Global K and F matrices
+	int nNodes = int(node_list.size());
+	SparseMatrix<double, RowMajor> K(nNodes, nNodes);
+	//K.reserve(50 * nNodes);
+	VectorXd F(nNodes);
+	F.setZero();
+
+	evaluate_tri_basis(28);
+	quadInfo28 info;
+
+
+	for (unsigned int i = 0; i < triangles.size(); i++) {
+		// set the local stiffness matrix to 0
+		MatrixXd k_loc(nodes_in_triangle, nodes_in_triangle);
+		k_loc.setZero();
+		for (unsigned int q = 0; q < tri_N.size(); q++) {
+			tri_10_output fast = tri_10_fast(i, q);
+
+			fast.J_det = abs(fast.J_det);
+			k_loc = k_loc + info.weights[q] * fast.dR_dx * fast.dR_dx.transpose() * fast.J_det;
+
+		}
+		// now assemble the global K and F matrices
+		for (int b = 0; b < nodes_in_triangle; b++) {
+			for (int a = 0; a <= b; a++) {
+				K.coeffRef(triangles[i]->controlP[a], triangles[i]->controlP[b]) += k_loc(a, b);
+			}
+		}
+	}
+	// now fill the the bottom part of the K matrix
+	SparseMatrix<double, RowMajor> K_trans = K.transpose();
+	SparseMatrix<double, RowMajor> Diag = K;
+	struct keep_diag {
+		inline bool operator() (const int& row, const int& col, const double&) const
+		{
+			return row == col;
+		}
+	};
+	Diag.prune(keep_diag());
+	K += K_trans - Diag;
+
+	// now take care of the boundary conditions
+	// first match up each member of bNodes with the correct NURBS curve point
+	vector<double> correct_weights(bNodes.size());
+	for (unsigned int i = 0; i < bNodes.size(); i++) {
+		int curve = 0;
+		int elem = 0;
+		int point = 0;
+		int j = 0;
+		bool found = false;
+		while (!found) {  // it is gaurenteed to find it so I can do this and hit a break later
+			Tri_elem *current = triangles[tri_NURB_elem_section_side[j][0]];
+			curve = tri_NURB_elem_section_side[j][1];
+			elem = tri_NURB_elem_section_side[j][2];
+			int side = tri_NURB_elem_section_side[j][4];
+			// the section doesn't matter since there is only one section per element at this point
+
+			for (int k = 0; k < 3 * degree; k++) {
+				if (current->controlP[k] == bNodes[i]) { // then we have a match
+					// now use node_side_index to determine the node along the nurbs curve
+					for (int m = 0; m <= degree; m++) {
+						if (node_side_index[side][m] == k) {
+							point = m;
+							found = true;
+							break;
+						}
+					}
+					break;
+				}
+			}
+			// increment the j for the while loop
+			j++;
+		}
+		correct_weights[i] = Elem_list[curve]->elem_Geom[elem].controlP[point][2];
+	}
+
+	// now update the F vector so that it has the correct values
+	for (unsigned int i = 0; i < bNodes.size(); i++) {
+
+		int col = bNodes[i];
+		SparseMatrix<double, ColMajor> cur_col = K.col(col);
+		int *non_zero_rows = cur_col.innerIndexPtr();
+		for (unsigned int j = 0; j < cur_col.nonZeros(); j++) {
+			int row = non_zero_rows[j];
+			if (row != col)
+				F(row) = F(row) - K.coeff(row, col) * correct_weights[i];
+
+			K.coeffRef(row, col) = 0;  // I think I can do this since it will never visit the same cell again, however, if there is a problem, it is probably because of this
+		}
+		// now I need to make zeros in the other direction
+		SparseMatrix<double, RowMajor> cur_row = K.row(col);
+
+		int *non_zero_cols = cur_row.innerIndexPtr();
+		for (unsigned int j = 0; j < cur_row.nonZeros(); j++) {
+			int row = col;
+			int looping_col = non_zero_cols[j];
+			K.coeffRef(row, looping_col) = 0;  
+		}
+
+		// now set the ones along the diagonal
+		K.coeffRef(col, col) = 1;
+		F.coeffRef(col) = correct_weights[i];
+
+	}
+	K.prune(0.0);
+
+	// now solve the system
+	SparseLU<SparseMatrix<double>> solver;
+	K.makeCompressed();
+	solver.analyzePattern(K);
+	solver.factorize(K);
+	VectorXd d = solver.solve(F);   // this is a SparseLU solver
+	// now update the node_list with this new smoothed weights
+	for (int i = 0; i < nNodes; i++) {
+		node_list[i][2] = d(i);
+	}
+}
 
 vector<double> nurb::eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb)
 {
@@ -694,7 +815,7 @@ void nurb::LE2D(vector<vector<double>> g)
 	}
 	// Generate a Lookup table for the basis
 
-	evaluate_tri_basis();
+	evaluate_tri_basis(16);
 	quadInfo info;
 	// now loop through all of the elements
 	for (unsigned int elem = 0; elem < triangles.size(); elem++) {
@@ -716,7 +837,6 @@ void nurb::LE2D(vector<vector<double>> g)
 			fast.J_det = abs(fast.J_det);
 			k_loc = k_loc + info.weights[q]*B.transpose()*D*B*fast.J_det;
 		}
-
 		// assemble the local element stiffness amtrix to the global stiffness matrix
 		for (unsigned int a = 0; a < nen; a++) {
 			for (unsigned int b = 0; b < nen; b++) {
@@ -727,9 +847,9 @@ void nurb::LE2D(vector<vector<double>> g)
 						unsigned int Pa = ID[triangles[elem]->controlP[a]][i];
 						unsigned int Pb = ID[triangles[elem]->controlP[b]][j];
 
-
-						if (Pa != (-1) && Pb != (-1))
+						if (Pa != (-1) && Pb != (-1)) {
 							K.coeffRef(Pa, Pb) = K.coeffRef(Pa, Pb) + k_loc(p, q);
+						}
 						else if (Pa != (-1) && Pb == (-1)) {
 							F(Pa) = F(Pa) - (k_loc(p, q) * g[triangles[elem]->controlP[b]][j]);
 						}
@@ -756,56 +876,105 @@ void nurb::LE2D(vector<vector<double>> g)
 		}
 		node_list[i][0] += g[i][0];
 		node_list[i][1] += g[i][1];
-		node_list[i][2] += g[i][2];
 	}
 
 }
 
-void nurb::evaluate_tri_basis()
+void nurb::evaluate_tri_basis(int q_points)
 {
 	int n = 3;
-	quadInfo quad;
-	// now I need to loop through all of these points
+	if (q_points == 16) {
 
-	// set up A matrix to so that barycentric coordinates can be solved for
-	Matrix3d A;
-	A << 0, 1, 0,
-		0, 0, 1,
-		1, 1, 1;
-	Vector3d B;
-	Vector3d bary;
+		quadInfo quad;
+		// now I need to loop through all of these points
 
-	for (int cur_point = 0; cur_point < num_quad; cur_point++) {    // This only goes up to 16 because there are only 16 quad points
-																	// now determine the barycentric coordinate
-		B << quad.quadP[cur_point][0], quad.quadP[cur_point][1], 1;
-		bary = A.lu().solve(B);
+		// set up A matrix to so that barycentric coordinates can be solved for
+		Matrix3d A;
+		A << 0, 1, 0,
+			0, 0, 1,
+			1, 1, 1;
+		Vector3d B;
+		Vector3d bary;
 
-		double u = bary(0);
-		double v = bary(1);
-		double w = bary(2);
-		vector<double> temp(nodes_in_triangle, 0);   // this will hold each row of the tri_N before it is pushed back
-		vector<vector<double>> temp_der;
+		for (int cur_point = 0; cur_point < num_quad; cur_point++) {    // This only goes up to 16 because there are only 16 quad points
+																		// now determine the barycentric coordinate
+			B << quad.quadP[cur_point][0], quad.quadP[cur_point][1], 1;
+			bary = A.lu().solve(B);
 
-		for (int m = 0; m < nodes_in_triangle; m++) {
-			int i = int(bary_template[m][0] * double(degree));
-			int j = int(bary_template[m][1] * double(degree));
-			int k = int(bary_template[m][2] * double(degree));
+			double u = bary(0);
+			double v = bary(1);
+			double w = bary(2);
+			vector<double> temp(nodes_in_triangle, 0);   // this will hold each row of the tri_N before it is pushed back
+			vector<vector<double>> temp_der;
+
+			for (int m = 0; m < nodes_in_triangle; m++) {
+				int i = int(bary_template[m][0] * double(degree));
+				int j = int(bary_template[m][1] * double(degree));
+				int k = int(bary_template[m][2] * double(degree));
 
 
-			temp[m] = fast_fact[n] / (fast_fact[i] * fast_fact[j] * fast_fact[k])*pow(u, i)*pow(v, j)*pow(w, k);
-			vector <double> deriv(3, 0);
-			if ((i - 1) >= 0)
-				deriv[0] = n * fast_fact[n - 1] / (fast_fact[i - 1] * fast_fact[j] * fast_fact[k]) * pow(u, i - 1) * pow(v, j) * pow(w, k);
-			if ((j - 1) >= 0)
-				deriv[1] = n * fast_fact[n - 1] / (fast_fact[i] * fast_fact[j - 1] * fast_fact[k]) * pow(u, i) * pow(v, j - 1) * pow(w, k);
-			if ((k - 1) >= 0)
-				deriv[2] = n * fast_fact[n - 1] / (fast_fact[i] * fast_fact[j] * fast_fact[k - 1]) * pow(u, i) * pow(v, j) * pow(w, k - 1);
+				temp[m] = fast_fact[n] / (fast_fact[i] * fast_fact[j] * fast_fact[k])*pow(u, i)*pow(v, j)*pow(w, k);
+				vector <double> deriv(3, 0);
+				if ((i - 1) >= 0)
+					deriv[0] = n * fast_fact[n - 1] / (fast_fact[i - 1] * fast_fact[j] * fast_fact[k]) * pow(u, i - 1) * pow(v, j) * pow(w, k);
+				if ((j - 1) >= 0)
+					deriv[1] = n * fast_fact[n - 1] / (fast_fact[i] * fast_fact[j - 1] * fast_fact[k]) * pow(u, i) * pow(v, j - 1) * pow(w, k);
+				if ((k - 1) >= 0)
+					deriv[2] = n * fast_fact[n - 1] / (fast_fact[i] * fast_fact[j] * fast_fact[k - 1]) * pow(u, i) * pow(v, j) * pow(w, k - 1);
 
-			temp_der.push_back(deriv);
+				temp_der.push_back(deriv);
 
+			}
+			tri_N.push_back(temp);
+			tri_dN_du.push_back(temp_der);
 		}
-		tri_N.push_back(temp);
-		tri_dN_du.push_back(temp_der);
+	}
+
+	// NOW INCLUDE THE OPTION FOR THE 28 POINT QUADRATURE RULE
+	else if(q_points == 28){
+		quadInfo28 quad;
+		// now I need to loop through all of these points
+
+		// set up A matrix to so that barycentric coordinates can be solved for
+		Matrix3d A;
+		A << 0, 1, 0,
+			0, 0, 1,
+			1, 1, 1;
+		Vector3d B;
+		Vector3d bary;
+
+		for (int cur_point = 0; cur_point < 28; cur_point++) {    // This only goes up to 16 because there are only 16 quad points
+																		// now determine the barycentric coordinate
+			B << quad.quadP[cur_point][0], quad.quadP[cur_point][1], 1;
+			bary = A.lu().solve(B);
+
+			double u = bary(0);
+			double v = bary(1);
+			double w = bary(2);
+			vector<double> temp(nodes_in_triangle, 0);   // this will hold each row of the tri_N before it is pushed back
+			vector<vector<double>> temp_der;
+
+			for (int m = 0; m < nodes_in_triangle; m++) {
+				int i = int(bary_template[m][0] * double(degree));
+				int j = int(bary_template[m][1] * double(degree));
+				int k = int(bary_template[m][2] * double(degree));
+
+
+				temp[m] = fast_fact[n] / (fast_fact[i] * fast_fact[j] * fast_fact[k])*pow(u, i)*pow(v, j)*pow(w, k);
+				vector <double> deriv(3, 0);
+				if ((i - 1) >= 0)
+					deriv[0] = n * fast_fact[n - 1] / (fast_fact[i - 1] * fast_fact[j] * fast_fact[k]) * pow(u, i - 1) * pow(v, j) * pow(w, k);
+				if ((j - 1) >= 0)
+					deriv[1] = n * fast_fact[n - 1] / (fast_fact[i] * fast_fact[j - 1] * fast_fact[k]) * pow(u, i) * pow(v, j - 1) * pow(w, k);
+				if ((k - 1) >= 0)
+					deriv[2] = n * fast_fact[n - 1] / (fast_fact[i] * fast_fact[j] * fast_fact[k - 1]) * pow(u, i) * pow(v, j) * pow(w, k - 1);
+
+				temp_der.push_back(deriv);
+
+			}
+			tri_N.push_back(temp);
+			tri_dN_du.push_back(temp_der);
+		}
 	}
 }
 
@@ -924,11 +1093,6 @@ tri_10_output nurb::tri_10_fast(unsigned int tri, int q)
 	temp << output.Jacob.inverse();
 	output.dR_dx = dR_dxi * temp;
 	output.J_det = output.Jacob.determinant();
-
-	//cout << output.dR_dx << endl << endl;
-	//cout << output.Jacob << endl << endl;
-	//cout << output.J_det << endl << endl;
-
 
 	return output;
 }

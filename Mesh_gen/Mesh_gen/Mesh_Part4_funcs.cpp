@@ -18,10 +18,10 @@
 
 using namespace std;
 
-/*void nurb::create_xmsh(string filename, int degree) 
+void nurb::create_xmsh(string filename, int degree) 
 {
 	ofstream xmsh_file;
-	xmsh_file.open(filename + ".xmsh");
+	xmsh_file.open(filename + "_final.xmsh");
 	
 	// get system time
 	time_t cur_time = time(NULL);
@@ -36,7 +36,7 @@ using namespace std;
 	// loop through the node list
 
 	xmsh_file << "% Node List" << endl << "% NUMBER OF NODES" << endl << node_list.size() << endl;
-	unsigned int node_size = node_list.size();
+	unsigned int node_size = unsigned int(node_list.size());
 	for (unsigned int i = 0; i < node_size; i++) {
 		xmsh_file << i+1 << "," << node_list[i][0] << "," << node_list[i][1] << "," << node_list[i][2] << endl;
 	}
@@ -45,7 +45,7 @@ using namespace std;
 	// loop through the connectivity array
 
 	xmsh_file << "% Connectivity array" << endl << "% NUMBER OF TRIANGLES, NODES PER TRIANGLE" << endl << triangles.size() << "," << nodes_in_triangle << endl;
-	unsigned int tri_size = triangles.size();
+	unsigned int tri_size = unsigned (triangles.size());
 	for (unsigned int i = 0; i < tri_size; i++) {
 		xmsh_file << i + 1 << ",";
 		for (int j = 0; j < nodes_in_triangle; j++) {
@@ -55,8 +55,30 @@ using namespace std;
 				xmsh_file << triangles[i]->controlP[j] + 1 << ",";
 		}
 	}
-	xmsh_file << "% END OF CONNECTIVITY ARRAY" << endl;
-}*/
+	xmsh_file << "% END OF CONNECTIVITY ARRAY" << endl << endl;
+
+	// now give the NURBS curve data, THIS IS TEMPORARY
+	xmsh_file << " % NURBS Curve Information" << endl;
+	xmsh_file << " % The format is: " << endl << " % NURBS CURVE,ELEM NUM,XPOINT,YPOINT,WEIGHT" << endl;
+	for (int i = 0; i < num_curves; i++) {
+		for (int j = 0; j < Elem_list[i]->n_el; j++) {
+			for (int k = 0; k < degree; k++) {
+				xmsh_file << i << "," << j << "," << Elem_list[i]->elem_Geom[j].controlP[k][0] << "," << Elem_list[i]->elem_Geom[j].controlP[k][1] << "," << Elem_list[i]->elem_Geom[j].controlP[k][2] << endl;
+			}
+		}
+	}
+	xmsh_file << " % END OF CURVE INFORMATION" << endl << endl;
+
+	// now give the data that connects the nurbs curves to the triangles
+	xmsh_file << " % Information connecting NURBS curve and Triangles" << endl << tri_NURB_elem_section_side.size() << endl;
+
+	for (unsigned int i = 0; i < int(tri_NURB_elem_section_side.size()); i++) {
+		vector<unsigned int> tri_row = tri_NURB_elem_section_side[i];
+		xmsh_file << i + 1 << "," << tri_row[0] << "," << tri_row[1] << "," << tri_row[2] << "," << tri_row[4] << "," << tri_row[5] << endl;
+	}
+	xmsh_file << " % END OF CONNECTING INFORMATION" << endl;
+	xmsh_file.close();
+}
 
 void nurb::display_mesh(string filename)
 {
