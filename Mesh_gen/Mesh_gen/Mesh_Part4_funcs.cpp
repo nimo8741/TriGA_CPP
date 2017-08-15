@@ -112,23 +112,34 @@ void nurb::display_mesh(string filename)
 	mxDestroyArray(mat_nodes1);
 	mxDestroyArray(mat_nodes2);
 
-	// now loop through all of the triangles to add in linear edges between the nodes
-	
-	mxArray *x_points = mxCreateDoubleMatrix(3 * (degree + 1), 1, mxREAL);  // create the mxArray of the correct size
-	mxArray *y_points = mxCreateDoubleMatrix(3 * (degree + 1), 1, mxREAL);
-	for (size_t i = 0; i < triangles.size(); i++) {
-		for (int j = 0; j < 3; j++) { // loop through all of the sides
-			for (int k = 0; k < degree + 1; k++) { // loop through all of the points along that side
-				column1[(degree + 1)*(j)+k] = node_list[triangles[i]->controlP[node_side_index[j][k]]][0];
-				column2[(degree + 1)*(j)+k] = node_list[triangles[i]->controlP[node_side_index[j][k]]][1];
-			}
+	// now loop through all of the global edges and display the connecting nurbs curves
+	// first I need to create a template for the basis evaluations since this can be reused from element to element
+	vector<vector<double>> N(11, vector<double>(degree + 1, 0.0));
+	for (int j = 0; j < 11; j++) {
+		for (int i = 0; i <= degree; i++) {
+			double xi = double(j) / 10.0;
+			N[j][i] = n_choose_k(degree, i) * pow(xi, i) * pow(1 - xi, degree - i);
 		}
+	}
+	mxArray *x_points = mxCreateDoubleMatrix(11, 1, mxREAL);  // create the mxArray of the correct size
+	mxArray *y_points = mxCreateDoubleMatrix(11, 1, mxREAL);
+	for (size_t i = 0; i < global_edges.size(); i++) {
+		vector<vector<double>> R = eval_edges(N, int(i));
+			for (int j = 0; j < 11; j++) { // loop through all of the xi values
+				column1[j] = 0;
+				column2[j] = 0;
+				for (int k = 0; k <= degree; k++) {
+					column1[j] += node_list[global_edges[i][k]][0] * R[j][k];
+					column2[j] += node_list[global_edges[i][k]][1] * R[j][k];
+				}
+			}
 
-		memcpy((void *)mxGetPr(x_points), (void *)column1, sizeof(double) * 3 * (degree + 1));   // copy the data over
-		memcpy((void *)mxGetPr(y_points), (void *)column2, sizeof(double) * 3 * (degree + 1));
+		memcpy((void *)mxGetPr(x_points), (void *)column1, sizeof(double) * 11);   // copy the data over
+		memcpy((void *)mxGetPr(y_points), (void *)column2, sizeof(double) * 11);
 		engPutVariable(mat_eng, "x_coor", x_points);   // set the variable in the matlab workspace
 		engPutVariable(mat_eng, "y_coor", y_points);
 		engEvalString(mat_eng, "plot(x_coor, y_coor, 'r')");
+		engEvalString(mat_eng, "grid on; grid minor");
 
 	}
 	// free all the memory
@@ -152,4 +163,23 @@ double** nurb::vec_to_array(vector<vector<double>> &vec, unsigned int rows)
 
 	}
 	return temp;
+}
+
+
+vector<vector<double>> nurb::eval_edges(vector<vector<double>> N, int edge)
+{
+	// First I need to figure out the weight to determine the rational basis function evaluations
+	vector<vector<double>> R(11, vector<double>(degree + 1, 0.0));
+	for (int i = 0; i < 11; i++) {
+		double w_tot = 0;
+		for (int j = 0; j <= degree; j++) {
+			w_tot += node_list[global_edges[edge][j]][2] * N[i][j];
+		}
+		for (int j = 0; j <= degree; j++) {
+			R[i][j] = node_list[global_edges[edge][j]][2] * N[i][j] / w_tot;
+			if (isnan(R[i][j]))
+				R[i][j] = 0.0;
+		}
+	}
+	return R;
 }

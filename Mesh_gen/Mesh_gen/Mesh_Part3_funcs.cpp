@@ -171,6 +171,17 @@ void nurb::organize_boundary()
 	}
 	// now organize bNodes to that it is an increasing list
 	sort(bNodes.begin(), bNodes.end());
+	// now loop through to create bNodeBool
+	bNodeBool.resize(node_list.size());
+	count = 0;
+	for (int i = 0; i < int(node_list.size()); i++) {
+		if (bNodes[count] == i) {
+			bNodeBool[i] = true;
+			count++;
+			if (count == bNodes.size())
+				break;
+		}
+	}
 }
 
 bool nurb::operator()(int i, int j)
@@ -541,6 +552,39 @@ vector<vector<double>> nurb::determine_dirichlet()
 			}
 		}
 	}
+	// now determine the neighbor_LE_nodes to help speed up the element formation
+	int list_size = (int(node_list.size()) - int(bNodes.size())) << 1;
+	neighbor_LE_num.resize(list_size);
+	int count = 0;  // this will keep track of its position in the unaltered list
+	for (int i = 0; i < list_size; i++) {
+		// determine if the entire row needs to be erased or not
+		if (bNodeBool[count]) {  // the row needs to be deleted
+			neighbor_nodes.erase(neighbor_nodes.begin() + i);
+			i--;
+		}
+		else { // we need to go down the length of the row and determine if the any nodes need to be deleted from within
+			int row_len = int(neighbor_nodes[i].size());
+			for (int j = 0; j < row_len; j++) {
+				if (bNodeBool[neighbor_nodes[i][j]]) {   // it needs to be deleted
+					neighbor_nodes[i].erase(neighbor_nodes[i].begin() + j);
+					j--;
+					row_len--;
+				}
+				else {  // it needs to be altered
+					neighbor_nodes[i][j] = neighbor_nodes[i][j] << 1;
+					neighbor_nodes[i].insert(neighbor_nodes[i].begin() + j + 1, neighbor_nodes[i][j] + 1);
+					j++;
+					row_len++;
+				}
+			}
+			// I need to make a duplicate row
+			neighbor_nodes.insert(neighbor_nodes.begin() + i + 1, neighbor_nodes[i]);
+			neighbor_LE_num(i) = row_len;
+			neighbor_LE_num(i + 1) = row_len;
+			i++;
+		}
+		count++;
+	}
 	return g;
 }
 
@@ -627,21 +671,21 @@ void nurb::solve_laplacian(vector<vector<double>> g)
 {
 	// Declare the Global K and F matrices
 	int nNodes = int(node_list.size());
-	SparseMatrix<double, RowMajor> K(nNodes, nNodes);
-	//K.reserve(50 * nNodes);
+	SparseMatrix<double, ColMajor> K(nNodes, nNodes);
+	K.reserve(neighbor_nodes_num);
 	VectorXd F(nNodes);
 	F.setZero();
 
 	evaluate_tri_basis(28);
 	quadInfo28 info;
 
-
+	MatrixXd k_loc(nodes_in_triangle, nodes_in_triangle);
 	for (unsigned int i = 0; i < triangles.size(); i++) {
 		// set the local stiffness matrix to 0
-		MatrixXd k_loc(nodes_in_triangle, nodes_in_triangle);
 		k_loc.setZero();
+
 		for (unsigned int q = 0; q < tri_N.size(); q++) {
-			tri_10_output fast = tri_10_fast(i, q);
+			tri_10_output fast = tri_10_fast(i, q, false);
 
 			fast.J_det = abs(fast.J_det);
 			k_loc = k_loc + info.weights[q] * fast.dR_dx * fast.dR_dx.transpose() * fast.J_det;
@@ -655,8 +699,8 @@ void nurb::solve_laplacian(vector<vector<double>> g)
 		}
 	}
 	// now fill the the bottom part of the K matrix
-	SparseMatrix<double, RowMajor> K_trans = K.transpose();
-	SparseMatrix<double, RowMajor> Diag = K;
+	SparseMatrix<double, ColMajor> K_trans = K.transpose();
+	SparseMatrix<double, ColMajor> Diag = K;
 	struct keep_diag {
 		inline bool operator() (const int& row, const int& col, const double&) const
 		{
@@ -711,31 +755,29 @@ void nurb::solve_laplacian(vector<vector<double>> g)
 			int row = non_zero_rows[j];
 			if (row != col)
 				F(row) = F(row) - K.coeff(row, col) * correct_weights[i];
-
-			K.coeffRef(row, col) = 0;  // I think I can do this since it will never visit the same cell again, however, if there is a problem, it is probably because of this
 		}
 		// now I need to make zeros in the other direction
-		SparseMatrix<double, RowMajor> cur_row = K.row(col);
+		SparseMatrix<double, ColMajor> cur_row = K.row(col);
 
-		int *non_zero_cols = cur_row.innerIndexPtr();
-		for (unsigned int j = 0; j < cur_row.nonZeros(); j++) {
-			int row = col;
-			int looping_col = non_zero_cols[j];
-			K.coeffRef(row, looping_col) = 0;  
+		for (unsigned int j = 0; j < cur_col.nonZeros(); j++) {
+			int row = non_zero_rows[j];
+			K.coeffRef(row, col) = 0.0;
+			K.coeffRef(col, row) = 0.0;
 		}
 
 		// now set the ones along the diagonal
 		K.coeffRef(col, col) = 1;
-		F.coeffRef(col) = correct_weights[i];
+		F(col) = correct_weights[i];
 
 	}
+
 	K.prune(0.0);
 
 	// now solve the system
 	SparseLU<SparseMatrix<double>> solver;
-	K.makeCompressed();
 	solver.analyzePattern(K);
 	solver.factorize(K);
+
 	VectorXd d = solver.solve(F);   // this is a SparseLU solver
 	// now update the node_list with this new smoothed weights
 	for (int i = 0; i < nNodes; i++) {
@@ -784,7 +826,7 @@ void nurb::LE2D(vector<vector<double>> g)
 
 																	// Initialize the global K and F matrices
 	SparseMatrix<double, ColMajor> K(ndof, ndof);
-	K.setZero();
+	K.reserve(neighbor_LE_num);
 	VectorXd F(ndof);
 	F.setZero();
 
@@ -815,6 +857,8 @@ void nurb::LE2D(vector<vector<double>> g)
 	}
 	// Generate a Lookup table for the basis
 
+	tri_N.erase(tri_N.begin(), tri_N.end());
+	tri_dN_du.erase(tri_dN_du.begin(), tri_dN_du.end());
 	evaluate_tri_basis(16);
 	quadInfo info;
 	// now loop through all of the elements
@@ -828,7 +872,7 @@ void nurb::LE2D(vector<vector<double>> g)
 		for (int q = 0; q < num_quad; q++) {
 			// construct the B matrix
 			MatrixXd B(3, nedof);
-			tri_10_output fast = tri_10_fast(elem, q);
+			tri_10_output fast = tri_10_fast(elem, q, true);
 			for (unsigned int a = 0; a < nen; a++) {
 				MatrixXd insert_mat(3, 2);
 				insert_mat << fast.dR_dx(a, 0), 0, 0, fast.dR_dx(a, 1), fast.dR_dx(a, 1), fast.dR_dx(a, 0);
@@ -837,7 +881,8 @@ void nurb::LE2D(vector<vector<double>> g)
 			fast.J_det = abs(fast.J_det);
 			k_loc = k_loc + info.weights[q]*B.transpose()*D*B*fast.J_det;
 		}
-		// assemble the local element stiffness amtrix to the global stiffness matrix
+		
+		// assemble the local element stiffness matrix to the global stiffness matrix
 		for (unsigned int a = 0; a < nen; a++) {
 			for (unsigned int b = 0; b < nen; b++) {
 				for (unsigned int i = 0; i < nsd; i++) {
@@ -848,7 +893,7 @@ void nurb::LE2D(vector<vector<double>> g)
 						unsigned int Pb = ID[triangles[elem]->controlP[b]][j];
 
 						if (Pa != (-1) && Pb != (-1)) {
-							K.coeffRef(Pa, Pb) = K.coeffRef(Pa, Pb) + k_loc(p, q);
+							K.coeffRef(Pa, Pb) = K.coeff(Pa, Pb) + k_loc(p, q);
 						}
 						else if (Pa != (-1) && Pb == (-1)) {
 							F(Pa) = F(Pa) - (k_loc(p, q) * g[triangles[elem]->controlP[b]][j]);
@@ -858,6 +903,7 @@ void nurb::LE2D(vector<vector<double>> g)
 			}
 		}
 	}
+
 
 	// Solve the system
 	SparseLU<SparseMatrix<double>> solver;
@@ -878,11 +924,32 @@ void nurb::LE2D(vector<vector<double>> g)
 		node_list[i][1] += g[i][1];
 	}
 
+
+	//// now normalize the minimum determinant against the area of the triangle
+	//for (unsigned int elem = 0; elem < triangles.size(); elem++) {
+
+	//	double elem_det = numeric_limits<double>::max();
+	//	//double elem_det = 0;
+	//	for (int q = 0; q < num_quad; q++) {
+	//		// construct the B matrix
+	//		tri_10_output fast = tri_10_fast(elem, q, true);
+	//		if (abs(fast.J_det) < elem_det)
+	//			elem_det = fast.J_det;
+	//	}
+
+	//	Matrix3d Area;
+	//	Area << node_list[triangles[elem]->controlP[0]][0], node_list[triangles[elem]->controlP[1]][0], node_list[triangles[elem]->controlP[2]][0],
+	//		node_list[triangles[elem]->controlP[0]][1], node_list[triangles[elem]->controlP[1]][1], node_list[triangles[elem]->controlP[2]][1],
+	//		1, 1, 1;
+	//	double A = abs(0.5 * Area.determinant());
+	//	norm_dets.push_back(elem_det / A);
+	//	cout << norm_dets.back() << endl;
+	//}
 }
 
 void nurb::evaluate_tri_basis(int q_points)
 {
-	int n = 3;
+	int n = degree;
 	if (q_points == 16) {
 
 		quadInfo quad;
@@ -978,41 +1045,8 @@ void nurb::evaluate_tri_basis(int q_points)
 	}
 }
 
-tri_10_output nurb::tri_10_fast(unsigned int tri, int q)
+tri_10_output nurb::tri_10_fast(unsigned int tri, int q, bool rational)
 {
-	// testing for the first time it enters this function
-	/*node_list[60][0] = -4;
-	node_list[60][1] = -4;
-	
-	node_list[65][0] = -2;
-	node_list[65][1] = -4;
-
-	node_list[84][0] = -2.691889926396950;
-	node_list[84][1] = -2.691889926396950;
-
-	node_list[165][0] = -3.333333333333330;
-	node_list[165][1] = -4;
-
-	node_list[166][0] = -2.666666666666670;
-	node_list[166][1] = -4;
-
-	node_list[167][0] = -2.230629975465650;
-	node_list[167][1] = -3.563963308798980;
-
-	node_list[168][0] = -2.461259950931300;
-	node_list[168][1] = -3.127926617597970;
-
-	node_list[169][0] = -3.127926617597970;
-	node_list[169][1] = -3.127926617597970;
-
-	node_list[170][0] = -3.563963308798980;
-	node_list[170][1] = -3.563963308798980;
-
-	node_list[164][0] = -2.897296642132320;
-	node_list[164][1] = -3.563963308798980;
-	*/
-
-
 	unsigned int nen = int(tri_N[0].size());
 	tri_10_output output;   // create instance of struct I will eventually return
 	output.R.resize(nen);
@@ -1029,8 +1063,6 @@ tri_10_output nurb::tri_10_fast(unsigned int tri, int q)
 	double dN_du2_sum = 0.0;
 
 
-
-
 	for (unsigned int i = 0; i < nen; i++) {
 		dN_du0_sum += tri_dN_du[q][i][0];
 		dN_du1_sum += tri_dN_du[q][i][1];
@@ -1042,21 +1074,28 @@ tri_10_output nurb::tri_10_fast(unsigned int tri, int q)
 	double den = 0;
 	
 	for (unsigned int i = 0; i < nen; i++) {
-		output.R[i] = tri_N[q][i];
+		if (rational) {
 
-		dR_du(i, 0) = tri_dN_du[q][i][0] - (dN_du0_sum * tri_N[q][i]);
-		dR_du(i, 1) = tri_dN_du[q][i][1] - (dN_du1_sum * tri_N[q][i]);
-		dR_du(i, 2) = tri_dN_du[q][i][2] - (dN_du2_sum * tri_N[q][i]);
+			dR_du(i, 0) = tri_dN_du[q][i][0] - (dN_du0_sum * tri_N[q][i]);
+			dR_du(i, 1) = tri_dN_du[q][i][1] - (dN_du1_sum * tri_N[q][i]);
+			dR_du(i, 2) = tri_dN_du[q][i][2] - (dN_du2_sum * tri_N[q][i]);
+		}
+
+		else {
+
+			dR_du(i, 0) = tri_dN_du[q][i][0];
+			dR_du(i, 1) = tri_dN_du[q][i][1];
+			dR_du(i, 2) = tri_dN_du[q][i][2];
+		}
+		output.R[i] = tri_N[q][i];
 
 		num[0] += tri_N[q][i] * node_list[triangles[tri]->controlP[i]][0];
 		num[1] += tri_N[q][i] * node_list[triangles[tri]->controlP[i]][1];
-		num[2] += tri_N[q][i] * node_list[triangles[tri]->controlP[i]][2];
 		den += tri_N[q][i];
 
 	}
 	num[0] = num[0] / den;
 	num[1] = num[1] / den;
-	num[2] = num[2] / den;
 
 	output.x = num;
 

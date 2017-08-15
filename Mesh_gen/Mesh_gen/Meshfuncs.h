@@ -152,7 +152,7 @@ class nurb{
 		std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
 		void LE2D(std::vector<std::vector<double>> g);
 		void evaluate_tri_basis(int q_points);
-		tri_10_output tri_10_fast(unsigned int elem, int q);
+		tri_10_output tri_10_fast(unsigned int elem, int q, bool rational);
 
 		Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
 
@@ -161,6 +161,7 @@ class nurb{
 		void create_xmsh(std::string filename, int degree);
 		void display_mesh(std::string filename);
 		double** vec_to_array(std::vector<std::vector<double>> &vec, unsigned int rows);
+		std::vector<std::vector<double>> eval_edges(std::vector<std::vector<double>> N, int edge);
 
 	protected:
 		std::vector< std::vector<int> > BC;       // this is the boundary condition matrix.  There is only one for the entire problem
@@ -179,17 +180,23 @@ class nurb{
 	    // to which that edge belongs to.  By physical side, it is meant which bezier "half element" it belongs to
 		std::vector<std::vector <double>> node_list;
 		std::vector<int> bNodes;    // this is a list of all of the boundary nodes
+		std::vector<bool> bNodeBool;
 		int phy_groups;     // This is a value which keeps track of how many boundary line segments there are.  It is 1 larger than that since the last physical group is the internal domain of interest
 		std::vector<std::vector<double>> tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the basis functions
 	    std::vector<std::vector<std::vector<double>>> tri_dN_du;
 		// this is the 3D array containing the parametric derivative information.  The first dimension is the 16 evaluation points, the second are the 10 basis functions, and the third is each of the 3 directions of derivatives.
-		
+		std::vector<std::vector<int>> neighbor_nodes;
+		Eigen::VectorXi neighbor_nodes_num;   // This is like the above variable but instead just holds the size of each of the rows from the above variable
+		Eigen::VectorXi neighbor_LE_num;
+
 		int degree;
 		int nodes_in_triangle;
 		std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, the section of the element,
 		// the side of the element, and the order of the side (1 for the "correct" order and 0 for the reverse order)
 		std::vector<std::vector<int>> node_side_index;
 		std::vector<std::vector<double>> bary_template;     // this is the bary centric coordinates of all of the points of the triangular element
+
+		std::vector<std::vector<double>> eval_tri_edges;  // the first dimension is the x/y point and then the second dimension contains the 11 evaluations along that edge
 
 
 

@@ -223,7 +223,6 @@ void nurb::readMsh(std::string filename, int msh_degree)
 	// this data will be used later when constructing stucts which contain the data for each of the elements. The format of the .msh
 	// file is what forces be to define this temporary vector array.
 
-
 	for (int i = 0; i < nodes; i++) {
 		getline(infile, line);    // grab the next line
 		int k = 0;
@@ -359,7 +358,6 @@ void nurb::readMsh(std::string filename, int msh_degree)
 		vector<double> point3 = node_list[current->controlP[2]];
 		
 		
-		
 		for (int k = 3; k < nodes_in_triangle; k++) {    // start at 3 since I already have the first 3 points
 			point[0] = (bary_template[k][0] * point1[0]) + (bary_template[k][1] * point2[0]) + (bary_template[k][2] * point3[0]);
 			point[1] = (bary_template[k][0] * point1[1]) + (bary_template[k][1] * point2[1]) + (bary_template[k][2] * point3[1]);
@@ -454,7 +452,7 @@ void nurb::readMsh(std::string filename, int msh_degree)
 				
 				for (int k = 3; k < degree + 2; k++) {
 					node_list.push_back(current_controlP[k]);
-					global_edges[edge1Found].insert(global_edges[edge1Found].begin() + 1, int(node_list.size()) - 1);
+					global_edges[edge1Found].insert(global_edges[edge1Found].end() - 2, int(node_list.size()) - 1);
 					current->controlP[k] = int(node_list.size()) - 1;
 				}
 			}
@@ -500,7 +498,7 @@ void nurb::readMsh(std::string filename, int msh_degree)
 
 				for (int k = degree + 2; k < 2*degree + 1; k++) {
 					node_list.push_back(current_controlP[k]);
-					global_edges[edge2Found].insert(global_edges[edge2Found].begin() + 1, int(node_list.size()) - 1);
+					global_edges[edge2Found].insert(global_edges[edge2Found].end() - 2, int(node_list.size()) - 1);
 					current->controlP[k] = int(node_list.size()) - 1;
 				}
 			}
@@ -544,7 +542,7 @@ void nurb::readMsh(std::string filename, int msh_degree)
 
 				for (int k = 2*degree + 1; k < 3 * degree; k++) {
 					node_list.push_back(current_controlP[k]);
-					global_edges[edge3Found].insert(global_edges[edge3Found].begin() + 1, int(node_list.size()) - 1);
+					global_edges[edge3Found].insert(global_edges[edge3Found].end() - 2, int(node_list.size()) - 1);
 					current->controlP[k] = int(node_list.size()) - 1;
 				}
 
@@ -563,9 +561,33 @@ void nurb::readMsh(std::string filename, int msh_degree)
 			}
 		}
 
-		// now add current to the list of triangular elements
+		// now update the neighbor_nodes vector
+		neighbor_nodes.resize(node_list.size());  
+
+		for (int i = 0; i < nodes_in_triangle; i++) {
+			int current_row = current->controlP[i];  // this will act as the row to access
+			for (int j = 0; j < nodes_in_triangle; j++) {
+				int node_to_add = current->controlP[j];   // this is the node which will be added
+				bool found = false;
+				for (int k = 0; k < int(neighbor_nodes[current_row].size()); k++) {  // this will loop through all of the entries in the current row to determine if it already exists.  We want no repeats
+					if (neighbor_nodes[current_row][k] == node_to_add) {
+						found = true;
+						break;   // we can break since it has already been found.  There is no point in going through all of the rest of the loop
+					}
+				}
+				if (!found) {
+					neighbor_nodes[current_row].push_back(node_to_add);
+				}
+
+			}
+		}
 		triangles.push_back(current);
 		getline(infile, line);
+	}
+	// now get a variable which can be used later in smooth_weights
+	neighbor_nodes_num.resize(node_list.size());
+	for (int i = 0; i < int(node_list.size()); i++) {
+		neighbor_nodes_num(i) = int(neighbor_nodes[i].size());
 	}
 
 }
