@@ -1,0 +1,3 @@
+C:/Users/nickm/Documents/CU-Boulder Junior Year/IGA/TriGA/TriGA_CPP/CMakeFiles/TriGA_CPP.dir
+C:/Users/nickm/Documents/CU-Boulder Junior Year/IGA/TriGA/TriGA_CPP/CMakeFiles/ALL_BUILD.dir
+C:/Users/nickm/Documents/CU-Boulder Junior Year/IGA/TriGA/TriGA_CPP/CMakeFiles/ZERO_CHECK.dir

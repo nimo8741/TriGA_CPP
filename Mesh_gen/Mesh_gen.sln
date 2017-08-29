@@ -1,16 +1,16 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.26430.15
+VisualStudioVersion = 15.0.26430.16
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Mesh_gen", "Mesh_gen\Mesh_gen.vcxproj", "{96C956CD-FD9C-4499-AC90-502D3C3B630D}"
 EndProject
-Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "gmsh", "Mesh_gen\gmsh.exe", "{939422FF-3C65-4D8E-8388-ADCC0A8C63B6}"
+Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "gmsh", "..\IO_files\msh_files\gmsh.exe", "{91F92D4C-9A44-4FED-8A21-583C13DC1FBE}"
 	ProjectSection(DebuggerProjectSystem) = preProject
 		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP\Mesh_gen\Mesh_gen\gmsh.exe
+		Executable = C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP\IO_files\msh_files\gmsh.exe
 		RemoteMachine = DESKTOP-56HKOO2
-		StartingDirectory = C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP\Mesh_gen\Mesh_gen
+		StartingDirectory = C:\Users\nickm\Documents\CU-Boulder Junior Year\IGA\TriGA\TriGA_CPP\IO_files\msh_files
 		Environment = Default
 		LaunchingEngine = 00000000-0000-0000-0000-000000000000
 		UseLegacyDebugEngines = No
@@ -34,10 +34,10 @@ Global
 		{96C956CD-FD9C-4499-AC90-502D3C3B630D}.Release|x64.Build.0 = Release|x64
 		{96C956CD-FD9C-4499-AC90-502D3C3B630D}.Release|x86.ActiveCfg = Release|Win32
 		{96C956CD-FD9C-4499-AC90-502D3C3B630D}.Release|x86.Build.0 = Release|Win32
-		{939422FF-3C65-4D8E-8388-ADCC0A8C63B6}.Debug|x64.ActiveCfg = Release|x64
-		{939422FF-3C65-4D8E-8388-ADCC0A8C63B6}.Debug|x86.ActiveCfg = Release|x64
-		{939422FF-3C65-4D8E-8388-ADCC0A8C63B6}.Release|x64.ActiveCfg = Release|x64
-		{939422FF-3C65-4D8E-8388-ADCC0A8C63B6}.Release|x86.ActiveCfg = Release|x64
+		{91F92D4C-9A44-4FED-8A21-583C13DC1FBE}.Debug|x64.ActiveCfg = Release|x64
+		{91F92D4C-9A44-4FED-8A21-583C13DC1FBE}.Debug|x86.ActiveCfg = Release|x64
+		{91F92D4C-9A44-4FED-8A21-583C13DC1FBE}.Release|x64.ActiveCfg = Release|x64
+		{91F92D4C-9A44-4FED-8A21-583C13DC1FBE}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

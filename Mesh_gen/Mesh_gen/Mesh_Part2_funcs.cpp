@@ -37,9 +37,10 @@ filename passed in at the beginning of this program's execution
 
 void nurb::create_geo_file(string filename)
 {
+	
 	// First and foremost, create the .geo file
 	ofstream geo_file;
-	geo_file.open(filename + ".geo");
+	geo_file.open(path_to_file + "\\IO_files\\geo_files\\" + filename + ".geo");
 
 	int p_count = 1;   // point counter
 	int l_count = 1;   // line (edge) counter
@@ -124,7 +125,6 @@ void nurb::create_geo_file(string filename)
 	geo_file.close();
 }
 
-
 /**********************************************************************************
 Function prototype:
 void nurb::call_gmsh(string filename)
@@ -142,20 +142,33 @@ for the time being and the program awaits for gmsh to create its .msh output fil
 
 void nurb::call_gmsh(string filename)
 {
+	//	// figure out what operating system this is running on
+	//#ifdef _WIN32   // this is running on windows
+	//	windows = true;
+	//#else
+	//	windows = false;
+	//#endif
+		
 	// setup the arguments
-	
-	string args = filename + ".geo -1 -2 -o ";
+
+	string args = "\"" + path_to_file + "IO_files\\geo_files\\" + filename + ".geo\" -1 -2 -o ";
 	args += filename;
 	args += ".msh";
 
-	const int size = 200;
+	// setup the command
+	string cmd = "\"" + path_to_file + "IO_files\\msh_files\\gmsh.exe\"";
+	const int size = 1000;
 	char runline[size];
-	sprintf_s(runline, size, "gmsh.exe %s", args.c_str());
+	sprintf_s(runline, size, "\"%s %s\"", cmd.c_str(), args.c_str());
+	system((char *)runline);   // this line runs gmsh with default settings
 
-	system((char *) runline);   // this line runs gmsh with default settings
+	// now I need to move the file so that it lives in the correct place
+	string source = "\"" + path_to_file + "\\Mesh_gen\\Mesh_gen\\" + filename + ".msh\"";
+	string dest = "\"" + path_to_file + "IO_files\\msh_files\"";
+	sprintf_s(runline, size, "\"move %s %s\"", source.c_str(), dest.c_str());
+	system((char *)runline);
 
 }
-
 
 /**********************************************************************************
 Function prototype:
@@ -190,7 +203,7 @@ void nurb::readMsh(std::string filename, int msh_degree)
 
 	ifstream infile;
 	filename += ".msh";
-	infile.open(filename);
+	infile.open(path_to_file + "IO_files\\msh_files\\" + filename);
 	string line;       // this will be a reused variable that will hold one line at a time
 	double cur_num;     // this will be a reused variable that while help with reading in the numbers
 
@@ -592,44 +605,6 @@ void nurb::readMsh(std::string filename, int msh_degree)
 
 }
 
-
-
-vector<double> nurb::find_intersect(vector<double> line1p1, vector<double> line1p2, vector<double> line2p1, vector<double> line2p2)
-{
-	vector<double> intersect(2, 0);
-	double slope1, slope2;
-	if (line1p1[0] == line1p2[0]) { // there is an infinite slope since the two points lie on top of each other
-		intersect[0] = line1p1[0];
-		// now solve for the y coor
-		// the other one is gaurenteed to have a define slope since the two lines are guarenteed to intersect
-		slope2 = (line2p2[1] - line2p1[1]) / (line2p2[0] - line2p1[0]);
-		// now using the point-slope form of the equation for a line to find the y coor of the intersection
-		intersect[1] = slope2 * (intersect[0] - line2p1[0]) + line2p1[1];
-	}
-	else if (line2p1[0] == line2p2[0]) {  // line 2 is vertical so I need to rely on line 1
-		intersect[0] = line2p1[0];
-		slope1 = (line1p2[1] - line1p1[1]) / (line1p2[0] - line1p1[0]);
-		intersect[1] = slope1 * (intersect[0] - line1p1[0]) + line1p1[1];
-	}
-	else {  // now regular case where neither of the slopes are undefined
-		slope1 = (-1) * (line1p2[1] - line1p1[1]) / (line1p2[0] - line1p1[0]);  // I have the negative sign because when solving for intersection, I always need the negative of the slope
-		slope2 = (-1) * (line2p2[1] - line2p1[1]) / (line2p2[0] - line2p1[0]);
-		// now assemble the matrices for eigen to solve
-		Matrix2d A;
-		Vector2d B;
-		A << slope1, 1, slope2, 1;
-		B << line1p1[1] + slope1 * line1p1[0], line2p1[1] + slope2 * line2p1[0];
-		Vector2d x = A.colPivHouseholderQr().solve(B);    // solve the Ax = B problem
-		intersect[0] = x(0);
-		intersect[1] = x(1);
-
-	}
-
-
-	return intersect;
-}
-
-
 void nurb::get_bary(int degree)
 {
 	bary_template.resize(nodes_in_triangle);
@@ -690,31 +665,32 @@ int nurb::ij_to_index(int i, int j, int degree, vector<double> bary)
 	}
 
 	// if it made it this far, it is an internal node
-	int nodes_checked = 3 * degree - 1;
+	int nodes_checked = 3 * degree;
+	int virtual_degree = degree;
 	while (nodes_checked < nodes_in_triangle) {
 		// set up the internal triangle by translating and changing the degree
 		i--;
 		j--;
-		int virtual_degree = degree - 3;
+		virtual_degree -= 3;
 		int nodes_in_level = ((virtual_degree + 1) * (virtual_degree + 2)) >> 1;
 
 		// check for the vertices first
 		if (i == 0 && j == 0)
-			return nodes_checked + 1;
+			return nodes_checked;
 		else if (i == 0 && j == virtual_degree)
-			return nodes_checked + 2;
+			return nodes_checked + 1;
 		else if (i == virtual_degree && j == 0)
-			return nodes_checked + 3;
+			return nodes_checked + 2;
 
 		// now check for sides
 		if (i == 0) {   // this means it is on side 0
-			return nodes_checked + j + 3;
+			return nodes_checked + j + 2;
 		}
 		else if (j == 0) {   // this means it is on side 2
-			return nodes_checked + (virtual_degree - i) + (virtual_degree << 1) + 1;
+			return nodes_checked + (virtual_degree - i) + (virtual_degree << 1);
 		}
 		else if (i + j == virtual_degree) {   // this means it is on side 1
-			return nodes_checked + virtual_degree + i + 2;
+			return nodes_checked + virtual_degree + i + 1;
 		}
 		nodes_checked += 3 * virtual_degree;
 	}

@@ -6,22 +6,14 @@
 #include <sstream>
 #include <iostream>
 #include <stdio.h>
-#include <ctype.h>
-#include <cfloat>
 #include <time.h>
-#include <engine.h>
-
-#pragma comment ( lib, "libmat.lib" )
-#pragma comment ( lib, "libmx.lib" )
-#pragma comment ( lib, "libmex.lib" )
-#pragma comment ( lib, "libeng.lib" )
 
 using namespace std;
 
 void nurb::create_xmsh(string filename, int degree) 
 {
 	ofstream xmsh_file;
-	xmsh_file.open(filename + "_final.xmsh");
+	xmsh_file.open(path_to_file + "\\IO_files\\xmsh_files\\" + filename + ".xmsh");
 	
 	// get system time
 	time_t cur_time = time(NULL);
@@ -57,63 +49,50 @@ void nurb::create_xmsh(string filename, int degree)
 	}
 	xmsh_file << "% END OF CONNECTIVITY ARRAY" << endl << endl;
 
-	// now give the NURBS curve data, THIS IS TEMPORARY
-	xmsh_file << " % NURBS Curve Information" << endl;
-	xmsh_file << " % The format is: " << endl << " % NURBS CURVE,ELEM NUM,XPOINT,YPOINT,WEIGHT" << endl;
-	for (int i = 0; i < num_curves; i++) {
-		for (int j = 0; j < Elem_list[i]->n_el; j++) {
-			for (int k = 0; k < degree; k++) {
-				xmsh_file << i << "," << j << "," << Elem_list[i]->elem_Geom[j].controlP[k][0] << "," << Elem_list[i]->elem_Geom[j].controlP[k][1] << "," << Elem_list[i]->elem_Geom[j].controlP[k][2] << endl;
-			}
+	// loop through global edges list
+	unsigned int edge_size = unsigned(global_edges.size());
+	xmsh_file << "% Global Edge List" << "% NUMBER OF EDGES, NODES PER EDGE" << endl << edge_size << degree + 1 << endl;
+	for (unsigned int i = 0; i < edge_size; i++) {
+		xmsh_file << i << ",";
+		for (int j = 0; j < degree; j++) {
+			xmsh_file << global_edges[i][j] << ",";
 		}
+		xmsh_file << global_edges[i][degree] << endl;
 	}
-	xmsh_file << " % END OF CURVE INFORMATION" << endl << endl;
-
-	// now give the data that connects the nurbs curves to the triangles
-	xmsh_file << " % Information connecting NURBS curve and Triangles" << endl << tri_NURB_elem_section_side.size() << endl;
-
-	for (unsigned int i = 0; i < int(tri_NURB_elem_section_side.size()); i++) {
-		vector<unsigned int> tri_row = tri_NURB_elem_section_side[i];
-		xmsh_file << i + 1 << "," << tri_row[0] << "," << tri_row[1] << "," << tri_row[2] << "," << tri_row[4] << "," << tri_row[5] << endl;
-	}
-	xmsh_file << " % END OF CONNECTING INFORMATION" << endl;
+	xmsh_file << "% END OF GLOBAL EDGES" << endl << endl;
 	xmsh_file.close();
 }
 
 void nurb::display_mesh(string filename)
 {
-	Engine *mat_eng;
-	mat_eng = engOpen("null");
-	engSetVisible(mat_eng, false);
-	engEvalString(mat_eng, "close all");
-	//engEvalString(mat_eng, "figure");
+	ofstream control_file;
+	control_file.open(path_to_file + "\\IO_files\\dat_files\\control.dat");
 
-	// for now I am just going to display the control points
-	// first I need to convert the node_list from a 2D vector into a 2D array
+	double xmin = node_list[0][0];
+	double xmax = node_list[0][0];
+	double ymin = node_list[0][1];
+	double ymax = node_list[0][1];
 
-	const int num_nodes = int(node_list.size());
-	double **node_array = vec_to_array(node_list, num_nodes);
-	double *column1 = node_array[0];
-	double *column2 = node_array[1];
+	control_file << "# This is control.dat" << endl;
+	for (unsigned int i = 0; i < node_list.size(); i++) {
+		control_file << node_list[i][0] << " " << node_list[i][1] << endl;
 
-	mxArray *mat_nodes1 = mxCreateDoubleMatrix(num_nodes, 1, mxREAL);
-	mxArray *mat_nodes2 = mxCreateDoubleMatrix(num_nodes, 1, mxREAL);
-	// copy over the data
-	memcpy((void *)mxGetPr(mat_nodes1), (void *)column1, sizeof(double)*num_nodes);
-	memcpy((void *)mxGetPr(mat_nodes2), (void *)column2, sizeof(double)*num_nodes);
-	engPutVariable(mat_eng, "x_coor", mat_nodes1);
-	engPutVariable(mat_eng, "y_coor", mat_nodes2);
+		// update the min and max for sizing the plot
+		if (node_list[i][0] < xmin)
+			xmin = node_list[i][0];
+		else if (node_list[i][0] > xmax)
+			xmax = node_list[i][0];
+		if (node_list[i][1] < ymin)
+			ymin = node_list[i][1];
+		else if (node_list[i][1] > ymax)
+			ymax = node_list[i][1];
+	}
+	control_file.close();
+	int xmin_i = (xmin < 0) ? int(floor(xmin)) : int(ceil(xmin));
+	int xmax_i = (xmax < 0) ? int(floor(xmax)) : int(ceil(xmax));
+	int ymin_i = (ymin < 0) ? int(floor(ymin)) : int(ceil(ymin));
+	int ymax_i = (ymax < 0) ? int(floor(ymax)) : int(ceil(ymax));
 
-
-	engEvalString(mat_eng, "scatter(x_coor, y_coor, '.'); hold on");
-	engEvalString(mat_eng, "title('Mesh', 'Interpreter','latex','FontSize',16)");
-	engEvalString(mat_eng, "axis equal");
-
-	mxDestroyArray(mat_nodes1);
-	mxDestroyArray(mat_nodes2);
-
-	// now loop through all of the global edges and display the connecting nurbs curves
-	// first I need to create a template for the basis evaluations since this can be reused from element to element
 	vector<vector<double>> N(11, vector<double>(degree + 1, 0.0));
 	for (int j = 0; j < 11; j++) {
 		for (int i = 0; i <= degree; i++) {
@@ -121,34 +100,33 @@ void nurb::display_mesh(string filename)
 			N[j][i] = n_choose_k(degree, i) * pow(xi, i) * pow(1 - xi, degree - i);
 		}
 	}
-	mxArray *x_points = mxCreateDoubleMatrix(11, 1, mxREAL);  // create the mxArray of the correct size
-	mxArray *y_points = mxCreateDoubleMatrix(11, 1, mxREAL);
+
+	ofstream edge_file;
+	edge_file.open(path_to_file + "\\IO_files\\dat_files\\edges.dat");
+	edge_file << "# This is edges.dat" << endl;
 	for (size_t i = 0; i < global_edges.size(); i++) {
 		vector<vector<double>> R = eval_edges(N, int(i));
-			for (int j = 0; j < 11; j++) { // loop through all of the xi values
-				column1[j] = 0;
-				column2[j] = 0;
-				for (int k = 0; k <= degree; k++) {
-					column1[j] += node_list[global_edges[i][k]][0] * R[j][k];
-					column2[j] += node_list[global_edges[i][k]][1] * R[j][k];
-				}
+		vector<vector<double>> points(11, vector<double>(2, 0));
+		for (int j = 0; j < 11; j++) { // loop through all of the xi values
+			for (int k = 0; k <= degree; k++) {
+				points[j][0] += node_list[global_edges[i][k]][0] * R[j][k];
+				points[j][1] += node_list[global_edges[i][k]][1] * R[j][k];
 			}
-
-		memcpy((void *)mxGetPr(x_points), (void *)column1, sizeof(double) * 11);   // copy the data over
-		memcpy((void *)mxGetPr(y_points), (void *)column2, sizeof(double) * 11);
-		engPutVariable(mat_eng, "x_coor", x_points);   // set the variable in the matlab workspace
-		engPutVariable(mat_eng, "y_coor", y_points);
-		engEvalString(mat_eng, "plot(x_coor, y_coor, 'r')");
-		engEvalString(mat_eng, "grid on; grid minor");
+			edge_file << points[j][0] << " " << points[j][1] << endl;
+		}
+		edge_file << endl;
 
 	}
-	// free all the memory
-	mxDestroyArray(x_points);
-	mxDestroyArray(y_points);
-	delete[] column1;
-	delete[] column2;
-	delete[] node_array;
-	//engClose(mat_eng);
+	string cmd = "\"" + path_to_file + "gnuplot\\bin\\gnuplot.exe\"";
+
+	string args = "\"" + path_to_file + "plot_cmds.plot\"";
+
+
+	const int size = 1000;
+	char runline[size];
+	sprintf_s(runline, size, "\"%s %s\"", cmd.c_str(), args.c_str());
+	system((char *)runline);   // this line runs gmsh with default settings
+
 }
 
 double** nurb::vec_to_array(vector<vector<double>> &vec, unsigned int rows)
@@ -164,7 +142,6 @@ double** nurb::vec_to_array(vector<vector<double>> &vec, unsigned int rows)
 	}
 	return temp;
 }
-
 
 vector<vector<double>> nurb::eval_edges(vector<vector<double>> N, int edge)
 {

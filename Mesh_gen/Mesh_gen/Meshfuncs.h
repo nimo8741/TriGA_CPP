@@ -113,7 +113,7 @@ class nurb{
 		Geom_data *head_nurb;                               // this is the head of the linked list of the structs that contain the nurb data
 		void curve_len(Bezier_handle *Bez, int i);
 		Bezier_handle * extraction1D(Geom_data *var);
-		void fact_table();
+		void fact_table(int p);
 		void eval_bern(int p, int n, Bezier_handle *Bez);
 		void get_P_and_W(Bezier_handle *Bez, Geom_data *var, std::vector<double> KV_old);
 		std::vector<std::vector<int>> IEN(int n, int p, std::vector<double> Xi,int n_el);
@@ -131,11 +131,9 @@ class nurb{
 		void readMsh(std::string filename, int degree);
 		void get_bary(int degree);
 		int ij_to_index(int i, int j, int degree, std::vector<double> bary);
-		std::vector<double> find_intersect(std::vector<double> line1p1, std::vector<double> line1p2, std::vector<double> line2p1, std::vector<double> line2p2);
 
 		// Part 3: Smoothing and degree elevating the linear mesh
 		void smoothMesh(int mesh_degree);
-		//void smooth_weights(int degree);
 		void create_side_nodes();
 		void organize_boundary();
 		bool operator () (int i, int j);
@@ -198,8 +196,8 @@ class nurb{
 
 		std::vector<std::vector<double>> eval_tri_edges;  // the first dimension is the x/y point and then the second dimension contains the 11 evaluations along that edge
 
-
-
+		//bool windows;   // this will hold which operating system this code is running on.  true for windows, false for unix
+		std::string path_to_file;
 
 	private:
 		void refine_Xi(Geom_data *var);

@@ -47,9 +47,19 @@ contains the NURBS curve data
 
 Geom_data* nurb::readSpline(string filename)
 {
+	// first get the filepath to the current directory
+	system("cd > filepath.txt");
+	// read that file back in
+	ifstream file;
+	file.open("filepath.txt");
+	getline(file, path_to_file);
+	const int end = int(path_to_file.size());
+	path_to_file.erase(end - 17, 17);
+
+
 	ifstream infile;
 	filename += ".spline";
-	infile.open(filename);
+	infile.open(path_to_file + "IO_files\\spline_files\\" + filename);
 	string line;
 
 	getline(infile, line);  // HEADER line
@@ -721,11 +731,11 @@ the remainder of the program's execution
 Postcondition:
 This function saves the table within the protected fields of the class
 **********************************************************************************/
-void nurb::fact_table()
+void nurb::fact_table(int p)
 {
 	double total = 1;
 	fast_fact.push_back(total); // this is 0!
-	for (double i = 1; i <= 15; i++) {
+	for (double i = 1; i <= p; i++) {
 		total *= i;
 		fast_fact.push_back(total);
 	}
@@ -1239,7 +1249,7 @@ void nurb::cusp_detection(Bezier_handle * Bez)
 
 	// now I need to compute the turning angle
 	vector<double> turning;
-	for (int i = 0; i < derivs.size(); i++) {  
+	for (unsigned int i = 0; i < derivs.size(); i++) {  
 		double dot = (derivs[i][0] * derivs[i + 1][0]) + (derivs[i][1] * derivs[i + 1][1]); 
 		// I don't need the denominator because I already know that they are unit sized
 		turning.push_back(acos(dot) * 180 / 3.141592654);
@@ -1247,7 +1257,7 @@ void nurb::cusp_detection(Bezier_handle * Bez)
 	}
 
 	// now I need to go back through the turning vector and refine the curve depending on the size of its turning angle
-	for (int i = 0; i < turning.size(); i++) {
+	for (unsigned int i = 0; i < turning.size(); i++) {
 		if (turning[i] > 100) {  // then I am calling it a cusp
 			vector<double> xi_to_add;
 

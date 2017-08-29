@@ -135,7 +135,7 @@ void nurb::organize_boundary()
 
 			int elem = tri_NURB_elem_section_side[count][2];
 
-			while (count < tri_NURB_elem_section_side.size() && tri_NURB_elem_section_side[count][2] == elem) {
+			while (count < int(tri_NURB_elem_section_side.size()) && tri_NURB_elem_section_side[count][2] == elem) {
 
 				int tri = tri_NURB_elem_section_side[count][0];
 				int side = tri_NURB_elem_section_side[count][4];
@@ -751,7 +751,7 @@ void nurb::solve_laplacian(vector<vector<double>> g)
 		int col = bNodes[i];
 		SparseMatrix<double, ColMajor> cur_col = K.col(col);
 		int *non_zero_rows = cur_col.innerIndexPtr();
-		for (unsigned int j = 0; j < cur_col.nonZeros(); j++) {
+		for (int j = 0; j < cur_col.nonZeros(); j++) {
 			int row = non_zero_rows[j];
 			if (row != col)
 				F(row) = F(row) - K.coeff(row, col) * correct_weights[i];
@@ -759,7 +759,7 @@ void nurb::solve_laplacian(vector<vector<double>> g)
 		// now I need to make zeros in the other direction
 		SparseMatrix<double, ColMajor> cur_row = K.row(col);
 
-		for (unsigned int j = 0; j < cur_col.nonZeros(); j++) {
+		for (int j = 0; j < cur_col.nonZeros(); j++) {
 			int row = non_zero_rows[j];
 			K.coeffRef(row, col) = 0.0;
 			K.coeffRef(col, row) = 0.0;
