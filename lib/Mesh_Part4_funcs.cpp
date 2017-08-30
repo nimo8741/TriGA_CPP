@@ -128,7 +128,6 @@ void nurb::display_mesh(string filename)
 			i++;
 		}
 	}
-	cout << d_back_path << endl;
 	// now I need to rewrite the plot_cmds.plot
 	ofstream plot_file;
 	plot_file.open(path_to_file + "\\plot_cmds.plot");

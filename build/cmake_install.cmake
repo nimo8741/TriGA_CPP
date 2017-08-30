@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/nickm/Documents/TriGA_CPP
+# Install script for directory: C:/Users/CMGLab/Documents/TriGA_CPP
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -29,7 +29,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
-  include("C:/Users/nickm/Documents/TriGA_CPP/bin/lib/cmake_install.cmake")
+  include("C:/Users/CMGLab/Documents/TriGA_CPP/build/lib/cmake_install.cmake")
 
 endif()
 
@@ -41,5 +41,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "C:/Users/nickm/Documents/TriGA_CPP/bin/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "C:/Users/CMGLab/Documents/TriGA_CPP/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

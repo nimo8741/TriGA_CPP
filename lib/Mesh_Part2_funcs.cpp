@@ -163,7 +163,7 @@ void nurb::call_gmsh(string filename)
 	system((char *)runline);   // this line runs gmsh with default settings
 
 							   // now I need to move the file so that it lives in the correct place
-	string source = "\"" + path_to_file + "bin\\" + filename + ".msh\"";
+	string source = "\"" + path_to_file + "build\\" + filename + ".msh\"";
 	string dest = "\"" + path_to_file + "IO_files\\msh_files\"";
 	sprintf_s(runline, size, "\"move %s %s\"", source.c_str(), dest.c_str());
 	system((char *)runline);

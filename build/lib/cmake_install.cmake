@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/nickm/Documents/TriGA_CPP/lib
+# Install script for directory: C:/Users/CMGLab/Documents/TriGA_CPP/lib
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

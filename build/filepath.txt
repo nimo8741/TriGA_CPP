@@ -1,1 +1,1 @@
-C:\Users\nickm\Documents\TriGA_CPP\build
+C:\Users\CMGLab\Documents\TriGA_CPP\build
