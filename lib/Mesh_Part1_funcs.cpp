@@ -54,7 +54,7 @@ Geom_data* nurb::readSpline(string filename)
 	file.open("filepath.txt");
 	getline(file, path_to_file);
 	const int end = int(path_to_file.size());
-	path_to_file.erase(end - 3, 3);
+	path_to_file.erase(end - 5, 5);
 
 
 	ifstream infile;

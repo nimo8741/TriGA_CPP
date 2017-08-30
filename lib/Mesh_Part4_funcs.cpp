@@ -117,7 +117,7 @@ void nurb::display_mesh(string filename)
 		edge_file << endl;
 
 	}
-	string cmd = "\"" + path_to_file + "gnuplot\\bin\\gnuplot.exe\"";
+	string cmd = "\"" + path_to_file + "gnuplot\\build\\gnuplot.exe\"";
 	string args = "\"" + path_to_file + "plot_cmds.plot\"";
 
 	// now I need to create a verison of path_to_file which contains double backslashes instead of single ones
