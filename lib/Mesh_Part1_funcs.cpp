@@ -60,6 +60,7 @@ Geom_data* nurb::readSpline(string filename)
 	ifstream infile;
 	filename += ".spline";
 	infile.open(path_to_file + "IO_files\\spline_files\\" + filename);
+	cout << path_to_file + "IO_files\\spline_files\\" + filename << endl;
 	string line;
 
 	getline(infile, line);  // HEADER line

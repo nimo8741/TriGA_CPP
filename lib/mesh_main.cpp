@@ -9,6 +9,10 @@ using namespace Eigen;
 
 
 int main(int argc, char*argv[]) {
+	if (argc == 1) {
+		cout << "Please provide input arguments" << endl;
+		return 0;
+	}
 	nurb *action = new nurb;
 
 	int degree;
