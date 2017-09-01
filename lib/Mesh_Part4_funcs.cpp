@@ -18,7 +18,11 @@ void nurb::create_xmsh(string filename, int degree)
 	// get system time
 	time_t cur_time = time(NULL);
 	char str[26];
-	ctime_s(str, sizeof str, &cur_time);
+	#ifdef _WIN32
+		ctime_s(str, sizeof str, &cur_time);
+	#else
+		sprintf(str, "%s", ctime(&cur_time));
+	#endif
 
 
 	xmsh_file << "% XMSH output file for " << filename << endl;
@@ -28,7 +32,7 @@ void nurb::create_xmsh(string filename, int degree)
 	// loop through the node list
 
 	xmsh_file << "% Node List" << endl << "% NUMBER OF NODES" << endl << node_list.size() << endl;
-	unsigned int node_size = unsigned int(node_list.size());
+	unsigned int node_size = int(node_list.size());
 	for (unsigned int i = 0; i < node_size; i++) {
 		xmsh_file << i + 1 << "," << node_list[i][0] << "," << node_list[i][1] << "," << node_list[i][2] << endl;
 	}
@@ -139,7 +143,13 @@ void nurb::display_mesh(string filename)
 
 	const int size = 1000;
 	char runline[size];
-	sprintf_s(runline, size, "\"%s %s\"", cmd.c_str(), args.c_str());
+	
+	#ifdef _WIN32
+		sprintf_s(runline, size, "\"%s %s\"", cmd.c_str(), args.c_str());
+	#else
+		sprintf(runline, "\"%s %s\"", cmd.c_str(), args.c_str());
+	#endif
+	
 	system((char *)runline);   // this line runs gmsh with default settings
 
 }

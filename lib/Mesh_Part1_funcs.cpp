@@ -48,19 +48,31 @@ contains the NURBS curve data
 Geom_data* nurb::readSpline(string filename)
 {
 	// first get the filepath to the current directory
-	system("cd > filepath.txt");
+	#ifdef _WIN32
+        system("cd > filepath.txt");
+    #else
+        system("pwd > filepath.txt");
+	#endif
 	// read that file back in
 	ifstream file;
 	file.open("filepath.txt");
 	getline(file, path_to_file);
-	const int end = int(path_to_file.size());
-	path_to_file.erase(end - 5, 5);
+	const int end_index = int(path_to_file.size());
+	path_to_file.erase(end_index - 5, 5);
+
+
+	// Remember to remove this !!!!!!!!!!!!!!!!!
+	path_to_file = "/home/nickmoore/Documents/TriGA_CPP/";
 
 
 	ifstream infile;
 	filename += ".spline";
-	infile.open(path_to_file + "IO_files\\spline_files\\" + filename);
-	cout << path_to_file + "IO_files\\spline_files\\" + filename << endl;
+    #ifdef _WIN32
+        infile.open(path_to_file + "IO_files\\spline_files\\" + filename);
+    #else
+        infile.open(path_to_file + "IO_files/spline_files/" + filename);
+    #endif
+
 	string line;
 
 	getline(infile, line);  // HEADER line
@@ -97,14 +109,14 @@ Geom_data* nurb::readSpline(string filename)
 		while (j < 3) {
 			// loop through all of the white space
 			while (line[k] == ' ' || line[k] == '\t') {
-				k = k++;
+				k++;
 			}
 
 
 			// Loop through all the numbers
 			l = 0;
 			while (line[k + l] != '\t' && line[k + l] != ' ') {
-				l = l++;
+				l++;
 			}
 			string temp_num = line.substr(k, l);
 
@@ -140,14 +152,14 @@ Geom_data* nurb::readSpline(string filename)
 
 													// loop through all of the white space
 				while (line[l] == ' ' || line[l] == '\t') {
-					l = l++;
+					l++;
 				}
 
 
 				// Loop through all the numbers
 				m = 0;
 				while (line[l + m] != '\t' && line[l + m] != ' ') {
-					m = m++;
+					m++;
 					if (l + m == line.length()) {
 						break;
 					}
@@ -185,14 +197,14 @@ Geom_data* nurb::readSpline(string filename)
 
 			// loop through all of the white space
 			while (line[l] == ' ' || line[l] == '\t') {
-				l = l++;
+				l++;
 			}
 
 
 			// Loop through all the numbers
 			m = 0;
 			while (line[l + m] != '\t' && line[l + m] != ' ') {
-				m = m++;
+				m++;
 				if (l + m == line.length()) {
 					break;
 				}
@@ -227,14 +239,14 @@ Geom_data* nurb::readSpline(string filename)
 
 			// loop through all of the white space
 			while (line[l] == ' ' || line[l] == '\t') {
-				l = l++;
+				l++;
 			}
 
 
 			// Loop through all the numbers
 			m = 0;
 			while (line[l + m] != '\t' && line[l + m] != ' ') {
-				m = m++;
+				m++;
 				if (l + m == line.length()) {
 					break;
 				}
@@ -245,14 +257,14 @@ Geom_data* nurb::readSpline(string filename)
 
 			// loop through all of the white space
 			while (line[l] == ' ' || line[l] == '\t') {
-				l = l++;
+				l++;
 			}
 
 
 			// Loop through all the numbers
 			m = 0;
 			while (line[l + m] != '\t' && line[l + m] != ' ') {
-				m = m++;
+				m++;
 				if (l + m == line.length()) {
 					break;
 				}
@@ -286,7 +298,7 @@ Geom_data* nurb::readSpline(string filename)
 	// read all of the numbers
 	int m = 0;
 	while (line[m] != '\t' && line[m] != ' ') {
-		m = m++;
+		m++;
 		if (m == line.length()) {
 			break;
 		}
@@ -305,14 +317,14 @@ Geom_data* nurb::readSpline(string filename)
 
 		// loop through all of the white space
 		while (line[l] == ' ' || line[l] == '\t') {
-			l = l++;
+			l++;
 		}
 
 
 		// Loop through all the numbers
 		m = 0;
 		while (line[l + m] != '\t' && line[l + m] != ' ') {
-			m = m++;
+			m++;
 			if (l + m == line.length()) {
 				break;
 			}
@@ -325,14 +337,14 @@ Geom_data* nurb::readSpline(string filename)
 
 		// loop through all of the white space
 		while (line[l] == ' ' || line[l] == '\t') {
-			l = l++;
+			l++;
 		}
 
 
 		// Loop through all the numbers
 		m = 0;
 		while (line[l + m] != '\t' && line[l + m] != ' ') {
-			m = m++;
+			m++;
 			if (l + m == line.length()) {
 				break;
 			}
@@ -950,7 +962,7 @@ void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
 				else
 					alpha = 0.0;
 				// now save the values of the data points and project them
-				double point11 = Bez->elem_Geom[e_index].controlP[j - 1][0] * Bez->elem_Geom[e_index].weight[j - 1];   //11 = current j index, x or y (x = 0, y = 1) 
+				double point11 = Bez->elem_Geom[e_index].controlP[j - 1][0] * Bez->elem_Geom[e_index].weight[j - 1];   //11 = current j index, x or y (x = 0, y = 1)
 				double point12 = Bez->elem_Geom[e_index].controlP[j - 1][1] * Bez->elem_Geom[e_index].weight[j - 1];
 				double point21 = Bez->elem_Geom[e_index].controlP[j - 2][0] * Bez->elem_Geom[e_index].weight[j - 2];
 				double point22 = Bez->elem_Geom[e_index].controlP[j - 2][1] * Bez->elem_Geom[e_index].weight[j - 2];
@@ -978,7 +990,7 @@ void nurb::subdivide_element(Bezier_handle * Bez, int e_index)
 	// now I need to seperate the 1 element into 2
 	// the knot vector has C(0) continuity at this point so I don't have to do a full extraction
 	// also, therefore the extraction operator between the 2 element version and the one element is
-	// the identity matrix when multiplying the old and new Extraction operators together to obtain a 
+	// the identity matrix when multiplying the old and new Extraction operators together to obtain a
 	// NURBS to refined element operator, you would be multiplying the other matrix by the identity matrix
 	// therefore, that step is largely ignored.
 

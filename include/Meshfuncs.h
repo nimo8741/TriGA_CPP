@@ -20,9 +20,9 @@ struct Geom_data {
 
 
 struct Bezier_elem {    // This is the list structure that will eliminate the need to create the tree for every evaluation.
-	std::vector <std::vector<double>> controlP; // this array holds the data for the control points and weights.  the x location is in the first column, y in the second, and weight in the third (for when projected)
+	std::vector <std::vector<double> > controlP; // this array holds the data for the control points and weights.  the x location is in the first column, y in the second, and weight in the third (for when projected)
 	std::vector<double> weight;    // this holds the weight of the post-extraction local Bezier control points
-	std::vector<std::vector<double>> xi_real_loc;        // this is the physical location of where xi is evaluated at
+	std::vector<std::vector<double> > xi_real_loc;        // this is the physical location of where xi is evaluated at
 	double edge_len = 0.0;                  // this is the linear edge length along the entire NURBS curve
 	double curve_len = 0.0;                 // this is the approximate length of the actual curve length
 	int side;                           // this is the side of the global NURBS curve in which this element lives
@@ -33,7 +33,7 @@ struct Bezier_handle {
 	std::vector <Eigen::MatrixXd> Operator;
 	int p;
 	int n_el;
-	std::vector <std::vector <double>> N;                 // this is the value of the evaluate basis function each row is a different evaluation point and each col is a new basis function index
+	std::vector <std::vector <double> > N;                 // this is the value of the evaluate basis function each row is a different evaluation point and each col is a new basis function index
 	std::vector <double> xi_evals;           // this is the vector of xi evaluation points
 	std::vector<Bezier_elem> elem_Geom;     // this is a vector which contains all of the data for the control points and weights
 };
@@ -116,7 +116,7 @@ public:
 	void fact_table(int p);
 	void eval_bern(int p, int n, Bezier_handle *Bez);
 	void get_P_and_W(Bezier_handle *Bez, Geom_data *var, std::vector<double> KV_old);
-	std::vector<std::vector<int>> IEN(int n, int p, std::vector<double> Xi, int n_el);
+	std::vector<std::vector<int> > IEN(int n, int p, std::vector<double> Xi, int n_el);
 	void subdivide_element(Bezier_handle *Bez, int e_index);
 	void shape_refine(Bezier_handle * Bez);
 	double get_kurv(Bezier_handle * Bez, int elem, double xi);
@@ -141,25 +141,25 @@ public:
 	std::vector<double> determine_elem_split(int cur_nurb, int cur_elem);
 	void curve_refine(Bezier_handle * Bez, int cur_elem, std::vector<double> xi_to_add, bool part1);
 	void elevate_degree(Bezier_handle * Bez, int element);
-	std::vector<std::vector<double>> determine_dirichlet();
+	std::vector<std::vector<double> > determine_dirichlet();
 	double newton_find_xi(int cur_nurb, int cur_elem, std::vector<double> second_point, double guess);
 	double n_choose_k(int n, int k);
 
 	void smooth_weights(int degree);
-	void solve_laplacian(std::vector<std::vector<double>> g);
+	void solve_laplacian(std::vector<std::vector<double> > g);
 	std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
-	void LE2D(std::vector<std::vector<double>> g);
+	void LE2D(std::vector<std::vector<double> > g);
 	void evaluate_tri_basis(int q_points);
 	tri_10_output tri_10_fast(unsigned int elem, int q, bool rational);
 
-	Eigen::MatrixXd create_matrix(std::vector<std::vector<double>> input);
+	Eigen::MatrixXd create_matrix(std::vector<std::vector<double> > input);
 
 
 	// Part 4: Write the mesh to a .xmsh file to be read in by matlab and displayed
 	void create_xmsh(std::string filename, int degree);
 	void display_mesh(std::string filename);
-	double** vec_to_array(std::vector<std::vector<double>> &vec, unsigned int rows);
-	std::vector<std::vector<double>> eval_edges(std::vector<std::vector<double>> N, int edge);
+	double** vec_to_array(std::vector<std::vector<double> > &vec, unsigned int rows);
+	std::vector<std::vector<double> > eval_edges(std::vector<std::vector<double> > N, int edge);
 
 protected:
 	std::vector< std::vector<int> > BC;       // this is the boundary condition matrix.  There is only one for the entire problem
@@ -168,33 +168,33 @@ protected:
 	std::vector< Bezier_handle *> Elem_list;    // this is a list of he bezier elements.  Each entry contains all of the elements which make up the NURBS curve
 	int num_curves;
 	std::vector < double> fast_fact;
-	std::vector <std::vector< std::vector<int>>> Master_IEN;   // this is the IEN Array for the NURBS curves, not for the triangular elements
+	std::vector <std::vector< std::vector<int> > > Master_IEN;   // this is the IEN Array for the NURBS curves, not for the triangular elements
 
 
 	std::vector <Tri_elem *> triangles;      // this is a list of all of the triangular elements in the mesh
-	std::vector<std::vector <int>> global_edges;
+	std::vector<std::vector <int> > global_edges;
 	// the first column of the above field denotes the index of the first node in the side, 
 	// the second is the second node for the side, and the third is the physical group
 	// to which that edge belongs to.  By physical side, it is meant which bezier "half element" it belongs to
-	std::vector<std::vector <double>> node_list;
+	std::vector<std::vector <double> > node_list;
 	std::vector<int> bNodes;    // this is a list of all of the boundary nodes
 	std::vector<bool> bNodeBool;
 	int phy_groups;     // This is a value which keeps track of how many boundary line segments there are.  It is 1 larger than that since the last physical group is the internal domain of interest
-	std::vector<std::vector<double>> tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the basis functions
-	std::vector<std::vector<std::vector<double>>> tri_dN_du;
+	std::vector<std::vector<double> > tri_N;                 // this is the array containing the parametric evaluations.  The first dimension is each of the 16 evaluation points and the second is each of the basis functions
+	std::vector<std::vector<std::vector<double> > > tri_dN_du;
 	// this is the 3D array containing the parametric derivative information.  The first dimension is the 16 evaluation points, the second are the 10 basis functions, and the third is each of the 3 directions of derivatives.
-	std::vector<std::vector<int>> neighbor_nodes;
+	std::vector<std::vector<int> > neighbor_nodes;
 	Eigen::VectorXi neighbor_nodes_num;   // This is like the above variable but instead just holds the size of each of the rows from the above variable
 	Eigen::VectorXi neighbor_LE_num;
 
 	int degree;
 	int nodes_in_triangle;
-	std::vector<std::vector<unsigned int>> tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, the section of the element,
+	std::vector<std::vector<unsigned int> > tri_NURB_elem_section_side;     // this is a 2D array while holds the information for the triangles along the boundary, the NURBS curve of the boundary, the element of this curve, the section of the element,
 																		   // the side of the element, and the order of the side (1 for the "correct" order and 0 for the reverse order)
-	std::vector<std::vector<int>> node_side_index;
-	std::vector<std::vector<double>> bary_template;     // this is the bary centric coordinates of all of the points of the triangular element
+	std::vector<std::vector<int> > node_side_index;
+	std::vector<std::vector<double> > bary_template;     // this is the bary centric coordinates of all of the points of the triangular element
 
-	std::vector<std::vector<double>> eval_tri_edges;  // the first dimension is the x/y point and then the second dimension contains the 11 evaluations along that edge
+	std::vector<std::vector<double> > eval_tri_edges;  // the first dimension is the x/y point and then the second dimension contains the 11 evaluations along that edge
 
 													  //bool windows;   // this will hold which operating system this code is running on.  true for windows, false for unix
 	std::string path_to_file;

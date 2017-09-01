@@ -1,11 +1,18 @@
 project(TriGA_CPP)
-cmake_minimum_required(VERSION 3.9.0)
+cmake_minimum_required(VERSION 3.5.1)
 
 # set the output folder where the project executable will be
 set(ROOT_DIR ${PROJECT_SOURCE_DIR})
 set(EXECUTABLE_OUTPUT_PATH ${ROOT_DIR}/build)
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/lib)
+
 MESSAGE ("Source path: ${ROOT_DIR}")
+
+if (UNIX)
+     set(CMAKE_CXX_STANDARD 11)
+     set(CMAKE_CXX_STANDARD_REQUIRED ON)
+     set(CMAKE_BUILD_TYPE Debug)
+endif (UNIX)
 
 include_directories(Eigen_lib)
 include_directories(include)

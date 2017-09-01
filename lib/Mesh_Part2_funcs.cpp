@@ -60,7 +60,12 @@ void nurb::create_geo_file(string filename)
 
 			for (unsigned int k = 0; k < current->xi_evals.size(); k++) {        // loop through each of the quadrature points within the element
 				if (k != current->xi_evals.size() - 1) {
-					sprintf_s(line, size, "Point(%d) = {%f, %f, 0.0, 1.0};", p_count, cur_elem.xi_real_loc[k][0], cur_elem.xi_real_loc[k][1]);
+					#ifdef _WIN32
+						sprintf_s(line, size, "Point(%d) = {%f, %f, 0.0, 1.0};", p_count, cur_elem.xi_real_loc[k][0], cur_elem.xi_real_loc[k][1]);
+					#else
+						sprintf(line, "Point(%d) = {%f, %f, 0.0, 1.0};", p_count, cur_elem.xi_real_loc[k][0], cur_elem.xi_real_loc[k][1]);
+					#endif
+
 					geo_file << line << endl;
 					p_count++;
 				}
@@ -71,18 +76,32 @@ void nurb::create_geo_file(string filename)
 		geo_file << endl;
 		for (int j = 0; j < p_count - p_start; j++) {
 			if (j == p_count - p_start - 1) {
-				sprintf_s(line, size, "Line(%d) = {%d, %d};", l_count, j + p_start, p_start);
-				geo_file << line << endl;
-
-				sprintf_s(line, size, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, p_start);
-				geo_file << line << endl;
+				#ifdef _WIN32   // if this is running on windows
+					sprintf_s(line, size, "Line(%d) = {%d, %d};", l_count, j + p_start, p_start);
+					geo_file << line << endl;
+					sprintf_s(line, size, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, p_start);
+					geo_file << line << endl;
+				#else   // if this is not running on windows (i.e. linux)
+					sprintf(line, "Line(%d) = {%d, %d};", l_count, j + p_start, p_start);
+					geo_file << line << endl;
+					sprintf(line, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, p_start);
+					geo_file << line << endl;
+				#endif
 
 			}
 			else {
-				sprintf_s(line, size, "Line(%d) = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
-				geo_file << line << endl;
-				sprintf_s(line, size, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
-				geo_file << line << endl;
+
+				#ifdef _WIN32
+					sprintf_s(line, size, "Line(%d) = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
+					geo_file << line << endl;
+					sprintf_s(line, size, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
+					geo_file << line << endl;
+				#else
+					sprintf(line, "Line(%d) = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
+					geo_file << line << endl;
+					sprintf(line, "Physical Line(\"Knot Vector Section %d\") = {%d, %d};", l_count, j + p_start, j + 1 + p_start);
+					geo_file << line << endl;
+				#endif
 
 			}
 
@@ -142,30 +161,51 @@ for the time being and the program awaits for gmsh to create its .msh output fil
 
 void nurb::call_gmsh(string filename)
 {
-	//	// figure out what operating system this is running on
-	//#ifdef _WIN32   // this is running on windows
-	//	windows = true;
-	//#else
-	//	windows = false;
-	//#endif
 
-	// setup the arguments
-
-	string args = "\"" + path_to_file + "IO_files\\geo_files\\" + filename + ".geo\" -1 -2 -o ";
-	args += filename;
-	args += ".msh";
+	#ifdef _WIN32
+		string args = "\"" + path_to_file + "IO_files\\geo_files\\" + filename + ".geo\" -1 -2 -o ";
+        args += filename;
+        args += ".msh";
 
 	// setup the command
-	string cmd = "\"" + path_to_file + "IO_files\\msh_files\\gmsh.exe\"";
-	const int size = 1000;
-	char runline[size];
-	sprintf_s(runline, size, "\"%s %s\"", cmd.c_str(), args.c_str());
+        string cmd = "\"" + path_to_file + "IO_files\\msh_files\\gmsh.exe\"";
+        const int size = 1000;
+        char runline[size];
+		sprintf_s(runline, size, "\"%s %s\"", cmd.c_str(), args.c_str());
+	#else
+        ofstream sh_file;
+        sh_file.open(path_to_file + "gmsh_boot.sh");
+
+        string args = "\"" + path_to_file + "IO_files/geo_files/" + filename + ".geo\" -1 -2 -o ";
+        args += filename;
+        args += ".msh";
+
+	// setup the command
+        string cmd = "\"" + path_to_file + "IO_files/msh_files/gmsh_linux\"";
+        const int size = 1000;
+        char runline[size];
+        sprintf(runline, "sh %sgmsh_boot.sh",path_to_file.c_str());
+		sh_file << "\"" + path_to_file + "IO_files/msh_files/gmsh_linux\" " + args;
+		sh_file.close();
+	#endif
+
 	system((char *)runline);   // this line runs gmsh with default settings
 
 							   // now I need to move the file so that it lives in the correct place
-	string source = "\"" + path_to_file + "build\\" + filename + ".msh\"";
-	string dest = "\"" + path_to_file + "IO_files\\msh_files\"";
-	sprintf_s(runline, size, "\"move %s %s\"", source.c_str(), dest.c_str());
+
+
+	#ifdef _WIN32
+        string source = "\"" + path_to_file + "build\\" + filename + ".msh\"";
+        string dest = "\"" + path_to_file + "IO_files\\msh_files\"";
+		sprintf_s(runline, size, "\"move %s %s\"", source.c_str(), dest.c_str());
+	#else
+        string source = "\"" + path_to_file + "/" + filename + ".msh\"";
+        string dest = "\"" + path_to_file + "IO_files/msh_files\"";
+
+        cout << source << endl << dest << endl;
+		sprintf(runline, "\"move %s %s\"", source.c_str(), dest.c_str());
+	#endif
+
 	system((char *)runline);
 
 }
@@ -324,7 +364,7 @@ void nurb::readMsh(std::string filename, int msh_degree)
 		Tri_elem *current = new Tri_elem;
 		current->controlP.resize(nodes_in_triangle);
 
-		// 
+		//
 		/*
 
 		3

@@ -1138,8 +1138,8 @@ tri_10_output nurb::tri_10_fast(unsigned int tri, int q, bool rational)
 
 MatrixXd nurb::create_matrix(std::vector<std::vector<double>> input)
 {
-	unsigned first = unsigned int(input.size());
-	unsigned second = unsigned int(input[0].size());
+	unsigned int first = int(input.size());
+	unsigned int second = int(input[0].size());
 	MatrixXd output(first, second);
 
 	for (unsigned int i = 0; i < first; i++) {
