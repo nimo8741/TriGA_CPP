@@ -1,1 +1,1 @@
-/usr/bin/c++   -g   CMakeFiles/mesh_gen.dir/lib/mesh_main.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part1_funcs.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part2_funcs.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part3_funcs.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part4_funcs.cpp.o  -o mesh_gen 
+/usr/bin/c++    -w -O3   CMakeFiles/mesh_gen.dir/lib/mesh_main.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part1_funcs.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part2_funcs.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part3_funcs.cpp.o CMakeFiles/mesh_gen.dir/lib/Mesh_Part4_funcs.cpp.o  -o mesh_gen 

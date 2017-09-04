@@ -1,5 +1,5 @@
 % XMSH output file for airfoil
-% Completed at Tue Aug 29 23:55:55 2017
+% Completed at Mon Sep  4 16:08:36 2017
 
 % Degree of mesh:
 3
@@ -8950,8 +8950,9 @@
 1580,256,347,346,4660,4659,6802,6801,2055,2054,7356
 % END OF CONNECTIVITY ARRAY
 
-% Global Edge List% NUMBER OF EDGES, NODES PER EDGE
-24524
+% Global Edge List
+% NUMBER OF EDGES, NODES PER EDGE
+2452,4
 0,0,905,906,1
 1,1,4441,4442,2
 2,2,7247,7248,3

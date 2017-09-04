@@ -13,14 +13,15 @@ using namespace std;
 void nurb::create_xmsh(string filename, int degree)
 {
 	ofstream xmsh_file;
-	xmsh_file.open(path_to_file + "\\IO_files\\xmsh_files\\" + filename + ".xmsh");
 
 	// get system time
 	time_t cur_time = time(NULL);
 	char str[26];
 	#ifdef _WIN32
+		xmsh_file.open(path_to_file + "\\IO_files\\xmsh_files\\" + filename + ".xmsh");
 		ctime_s(str, sizeof str, &cur_time);
 	#else
+		xmsh_file.open(path_to_file + "/IO_files/xmsh_files/" + filename + ".xmsh");
 		sprintf(str, "%s", ctime(&cur_time));
 	#endif
 
@@ -55,7 +56,7 @@ void nurb::create_xmsh(string filename, int degree)
 
 	// loop through global edges list
 	unsigned int edge_size = unsigned(global_edges.size());
-	xmsh_file << "% Global Edge List" << "% NUMBER OF EDGES, NODES PER EDGE" << endl << edge_size << degree + 1 << endl;
+	xmsh_file << "% Global Edge List" << endl << "% NUMBER OF EDGES, NODES PER EDGE" << endl << edge_size << "," << degree + 1 << endl;
 	for (unsigned int i = 0; i < edge_size; i++) {
 		xmsh_file << i << ",";
 		for (int j = 0; j < degree; j++) {
@@ -70,8 +71,11 @@ void nurb::create_xmsh(string filename, int degree)
 void nurb::display_mesh(string filename)
 {
 	ofstream control_file;
-	control_file.open(path_to_file + "\\IO_files\\dat_files\\control.dat");
-
+	#ifdef WIN32
+        control_file.open(path_to_file + "\\IO_files\\dat_files\\control.dat");
+    #else
+        control_file.open(path_to_file + "/IO_files/dat_files/control.dat");
+    #endif
 	double xmin = node_list[0][0];
 	double xmax = node_list[0][0];
 	double ymin = node_list[0][1];
@@ -106,7 +110,13 @@ void nurb::display_mesh(string filename)
 	}
 
 	ofstream edge_file;
-	edge_file.open(path_to_file + "\\IO_files\\dat_files\\edges.dat");
+
+	#ifdef WIN32
+        edge_file.open(path_to_file + "\\IO_files\\dat_files\\edges.dat");
+	#else
+        edge_file.open(path_to_file + "/IO_files/dat_files/edges.dat");
+	#endif
+
 	edge_file << "# This is edges.dat" << endl;
 	for (size_t i = 0; i < global_edges.size(); i++) {
 		vector<vector<double>> R = eval_edges(N, int(i));
@@ -121,35 +131,54 @@ void nurb::display_mesh(string filename)
 		edge_file << endl;
 
 	}
-	string cmd = "\"" + path_to_file + "gnuplot\\build\\gnuplot.exe\"";
-	string args = "\"" + path_to_file + "plot_cmds.plot\"";
 
-	// now I need to create a verison of path_to_file which contains double backslashes instead of single ones
-	string d_back_path = path_to_file;
-	for (unsigned int i = 0; i < d_back_path.size(); i++) {
-		if (d_back_path[i] == '\\') { // there is a single backslash
-			d_back_path.insert(i, "\\");
-			i++;
-		}
-	}
-	// now I need to rewrite the plot_cmds.plot
-	ofstream plot_file;
-	plot_file.open(path_to_file + "\\plot_cmds.plot");
-	plot_file << "cd '" + d_back_path + "IO_files\\\\dat_files'" << endl;
-	plot_file << "set size square" << endl << "plot 'control.dat' with points linecolor rgb 'blue' pointtype 7 ps 0.2 notitle, \\" << endl;
-	plot_file << "     'edges.dat' with lines linecolor rgb 'red' lw 0.5 notitle" << endl << "set size square" << endl << "pause -1 \"Hit return to continue\"";
-	plot_file.close();
+    ofstream plot_file;
+
+	#ifdef WIN32
+        string cmd = "\"" + path_to_file + "gnuplot\\build\\gnuplot.exe\"";
+        string args = "\"" + path_to_file + "plot_cmds.plot\"";
+
+        // now I need to create a verison of path_to_file which contains double backslashes instead of single ones
+        string d_back_path = path_to_file;
+        for (unsigned int i = 0; i < d_back_path.size(); i++) {
+            if (d_back_path[i] == '\\') { // there is a single backslash
+                d_back_path.insert(i, "\\");
+                i++;
+            }
+        }
+
+            // now I need to rewrite the plot_cmds.plot
+        plot_file.open(path_to_file + "\\plot_cmds.plot");
+        plot_file << "cd '" + d_back_path + "IO_files\\\\dat_files'" << endl;
+        plot_file << "set size square" << endl << "plot 'control.dat' with points linecolor rgb 'blue' pointtype 7 ps 0.2 notitle, \\" << endl;
+        plot_file << "     'edges.dat' with lines linecolor rgb 'red' lw 0.5 notitle" << endl << "set size square" << endl << "pause -1 \"Hit return to continue\"";
+        plot_file.close();
+
+	#else
+        string cmd = "gnuplot";
+        string args = path_to_file + "plot_cmds.plot";
+
+        	// now I need to rewrite the plot_cmds.plot
+        plot_file.open(path_to_file + "/plot_cmds.plot");
+        plot_file << "cd '" + path_to_file + "IO_files/dat_files'" << endl;
+        plot_file << "set size square" << endl << "plot 'control.dat' with points linecolor rgb 'blue' pointtype 5 ps 0.5 notitle, \\" << endl;
+        plot_file << "     'edges.dat' with lines linecolor rgb 'red' lw 0.5 notitle" << endl << "set size square" << endl << "pause -1 \"Hit return to continue\"";
+        plot_file.close();
+
+
+	#endif
+
 
 
 	const int size = 1000;
 	char runline[size];
-	
+
 	#ifdef _WIN32
 		sprintf_s(runline, size, "\"%s %s\"", cmd.c_str(), args.c_str());
 	#else
-		sprintf(runline, "\"%s %s\"", cmd.c_str(), args.c_str());
+		sprintf(runline, "%s %s", cmd.c_str(), args.c_str());
 	#endif
-	
+
 	system((char *)runline);   // this line runs gmsh with default settings
 
 }

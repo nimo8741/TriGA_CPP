@@ -60,11 +60,6 @@ Geom_data* nurb::readSpline(string filename)
 	const int end_index = int(path_to_file.size());
 	path_to_file.erase(end_index - 5, 5);
 
-
-	// Remember to remove this !!!!!!!!!!!!!!!!!
-	path_to_file = "/home/nickmoore/Documents/TriGA_CPP/";
-
-
 	ifstream infile;
 	filename += ".spline";
     #ifdef _WIN32

@@ -11,7 +11,7 @@ MESSAGE ("Source path: ${ROOT_DIR}")
 if (UNIX)
      set(CMAKE_CXX_STANDARD 11)
      set(CMAKE_CXX_STANDARD_REQUIRED ON)
-     set(CMAKE_BUILD_TYPE Debug)
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -O3")
 endif (UNIX)
 
 include_directories(Eigen_lib)

@@ -40,7 +40,11 @@ void nurb::create_geo_file(string filename)
 
 	// First and foremost, create the .geo file
 	ofstream geo_file;
-	geo_file.open(path_to_file + "\\IO_files\\geo_files\\" + filename + ".geo");
+	#ifdef WIN32
+        geo_file.open(path_to_file + "\\IO_files\\geo_files\\" + filename + ".geo");
+    #else
+        geo_file.open(path_to_file + "IO_files/geo_files/" + filename + ".geo");
+    #endif
 
 	int p_count = 1;   // point counter
 	int l_count = 1;   // line (edge) counter
@@ -188,7 +192,6 @@ void nurb::call_gmsh(string filename)
 		sh_file << "\"" + path_to_file + "IO_files/msh_files/gmsh_linux\" " + args;
 		sh_file.close();
 	#endif
-
 	system((char *)runline);   // this line runs gmsh with default settings
 
 							   // now I need to move the file so that it lives in the correct place
@@ -198,15 +201,17 @@ void nurb::call_gmsh(string filename)
         string source = "\"" + path_to_file + "build\\" + filename + ".msh\"";
         string dest = "\"" + path_to_file + "IO_files\\msh_files\"";
 		sprintf_s(runline, size, "\"move %s %s\"", source.c_str(), dest.c_str());
-	#else
-        string source = "\"" + path_to_file + "/" + filename + ".msh\"";
-        string dest = "\"" + path_to_file + "IO_files/msh_files\"";
+		system((char *)runline);
 
-        cout << source << endl << dest << endl;
-		sprintf(runline, "\"move %s %s\"", source.c_str(), dest.c_str());
+	#else
+        string source = path_to_file + "build/" + filename + ".msh";
+
+        string dest = path_to_file + "IO_files/msh_files/" + filename + ".msh";
+
+        rename(source.c_str(), dest.c_str());
+
 	#endif
 
-	system((char *)runline);
 
 }
 
@@ -243,7 +248,14 @@ void nurb::readMsh(std::string filename, int msh_degree)
 
 	ifstream infile;
 	filename += ".msh";
-	infile.open(path_to_file + "IO_files\\msh_files\\" + filename);
+	#ifdef WIN32
+        infile.open(path_to_file + "IO_files\\msh_files\\" + filename);
+
+	#else
+        infile.open(path_to_file + "IO_files/msh_files/" + filename);
+
+	#endif
+
 	string line;       // this will be a reused variable that will hold one line at a time
 	double cur_num;     // this will be a reused variable that while help with reading in the numbers
 
@@ -284,13 +296,13 @@ void nurb::readMsh(std::string filename, int msh_degree)
 		while (j < 3) {
 			// loop through all of the white space
 			while (line[k] == ' ') {
-				k = k++;
+                k++;
 			}
 
 			// Loop through all the numbers
 			l = 0;
 			while (line[k + l] != ' ') {
-				l = l++;
+				l++;
 			}
 			string temp_num = line.substr(k, l);
 			cur_num = atof(temp_num.c_str());
