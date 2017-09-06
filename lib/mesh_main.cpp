@@ -32,7 +32,7 @@ int main(int argc, char*argv[]) {
 	action->create_geo_file(argv[1]);
 	action->call_gmsh(argv[1]);
 
-
+	// Read the resulting linear mesh back in
 	action->readMsh(argv[1], degree);
 	action->create_side_nodes();
 

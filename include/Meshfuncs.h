@@ -147,7 +147,6 @@ public:
 
 	void smooth_weights(int degree);
 	void solve_laplacian(std::vector<std::vector<double> > g);
-	std::vector<double> eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb);
 	void LE2D(std::vector<std::vector<double> > g);
 	void evaluate_tri_basis(int q_points);
 	tri_10_output tri_10_fast(unsigned int elem, int q, bool rational);
@@ -158,7 +157,6 @@ public:
 	// Part 4: Write the mesh to a .xmsh file to be read in by matlab and displayed
 	void create_xmsh(std::string filename, int degree);
 	void display_mesh(std::string filename);
-	double** vec_to_array(std::vector<std::vector<double> > &vec, unsigned int rows);
 	std::vector<std::vector<double> > eval_edges(std::vector<std::vector<double> > N, int edge);
 
 protected:

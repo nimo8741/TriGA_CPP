@@ -1086,27 +1086,39 @@ void nurb::refine_Xi(Geom_data * var)
 	}
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::shape_refine(Bezier_handle * Bez)
+
+Function description:
+This function evaluates the curvature at xi values of 0.2, 0.4, 0.6, and 0.8 for every
+Bezier element along the NURBS curve and compiles it into a list of increasing curvature.
+Then it goes through that list and if any of these locations has a curvature which is
+10 * (the median) + 1, curve refinement is implimented to divide the Bezier element.
+
+**********************************************************************************/
+
 void nurb::shape_refine(Bezier_handle * Bez)
 {
-	vector<pair<double, int>> kurvy_thing;
+	vector<pair<double, int>> kurv_holder;
 	int count = 0;
 	for (int i = 0; i < Bez->n_el; i++) {    // loop through all of the elements in the curve
 											 // now find the curvature at 4 equispaced points within the element
 		for (int j = 0; j < 4; j++) {
 			double kurv = get_kurv(Bez, i, double(j + 1) / 5);
-			kurvy_thing.push_back(make_pair(kurv, count));
+			kurv_holder.push_back(make_pair(kurv, count));
 			count++;
 		}
 	}
 	// now find the median value
-	sort(kurvy_thing.begin(), kurvy_thing.end());
-	int index = (int(kurvy_thing.size()) / 2) - 1;
+	sort(kurv_holder.begin(), kurv_holder.end());
+	int index = (int(kurv_holder.size()) / 2) - 1;
 
 	// now make a list of all of the indexes that need splitting
 	vector<int> split_index;
-	for (int i = index + 1; i < int(kurvy_thing.size()); i++) {
-		if (kurvy_thing[i].first >(10 * kurvy_thing[index].first) + 1)
-			split_index.push_back(kurvy_thing[i].second);
+	for (int i = index + 1; i < int(kurv_holder.size()); i++) {
+		if (kurv_holder[i].first >(10 * kurv_holder[index].first) + 1)
+			split_index.push_back(kurv_holder[i].second);
 	}
 	sort(split_index.begin(), split_index.end());
 	int cur_elem;
@@ -1141,7 +1153,6 @@ void nurb::shape_refine(Bezier_handle * Bez)
 				double val = xi_choices[split_index[i] % 4];
 				for (int j = 0; j < Bez->p; j++)
 					xi_to_add.push_back(val);
-
 			}
 		}
 
@@ -1152,6 +1163,18 @@ void nurb::shape_refine(Bezier_handle * Bez)
 
 }
 
+
+/**********************************************************************************
+Function prototype:
+void nurb::get_kurv(Bezier_handle * Bez, int elem, double xi)
+
+Function description:
+This function calculates the curvature of the specified NURBS curve, Bezier element,
+and xi value and returns it to shape_refine.  It follows the process and variables from 
+M. S. Floater in this paper http://www.mn.uio.no/math/english/people/aca/michaelf/papers/bez.pdf
+The section of importantance is Corollary 6 on page 14
+
+**********************************************************************************/
 double nurb::get_kurv(Bezier_handle * Bez, int elem, double xi)
 {
 	if (Bez->p < 2)
@@ -1240,6 +1263,25 @@ double nurb::get_kurv(Bezier_handle * Bez, int elem, double xi)
 
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::cusp_detection(Bezier_handle * Bez)
+
+Function description:
+This function determines first derivative vectors at xi = 0.001 and xi = 0.999 in adjacent
+elements so that these two location are close to each other.  Then upon employing the
+dot product formula, a turning angle is found between these two vector.  Then both of these
+two element are refine according to the following turning angle scheme (numbers listed
+are in degrees).
+
+100 <  angle < 130    =    1 equispaced refinement point each element
+130 <= angle < 145    =    2 equispaced refinement point each element
+145 <= angle < 155    =    3 equispaced refinement point each element
+155 <= angle < 165    =    4 equispaced refinement point each element
+165 <= angle < 175    =    5 equispaced refinement point each element
+175 <= angle < 180    =    6 equispaced refinement point each element
+
+**********************************************************************************/
 void nurb::cusp_detection(Bezier_handle * Bez)
 {
 	// I am going to do this by getting first derivative vectors at xi = 0.01 and 0.99 for each element
@@ -1351,6 +1393,17 @@ void nurb::cusp_detection(Bezier_handle * Bez)
 	}
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::get_deriv(Bezier_handle * Bez, int elem, double xi)
+
+Function description:
+This function is the helper function to cusp_detection which determines the 2
+coordinate first derivative vectors which will then be used in the dot product
+formula.  This also follows the structure of M. S. Floater formula in
+http://www.mn.uio.no/math/english/people/aca/michaelf/papers/bez.pdf
+
+**********************************************************************************/
 vector<double> nurb::get_deriv(Bezier_handle * Bez, int elem, double xi)
 {
 	vector<double> result(2, 0);

@@ -1,6 +1,0 @@
-/home/nickmoore/Documents/TriGA_CPP/build/CMakeFiles/edit_cache.dir
-/home/nickmoore/Documents/TriGA_CPP/build/CMakeFiles/rebuild_cache.dir
-/home/nickmoore/Documents/TriGA_CPP/build/CMakeFiles/mesh_gen.dir
-/home/nickmoore/Documents/TriGA_CPP/build/lib/CMakeFiles/edit_cache.dir
-/home/nickmoore/Documents/TriGA_CPP/build/lib/CMakeFiles/rebuild_cache.dir
-/home/nickmoore/Documents/TriGA_CPP/build/lib/CMakeFiles/TriGA_CPP.dir

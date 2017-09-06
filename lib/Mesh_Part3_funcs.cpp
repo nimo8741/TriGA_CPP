@@ -31,6 +31,15 @@ void nurb::smoothMesh(int mesh_degree)
 
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::create_side_nodes()
+
+Function description:
+This function creates a small 2D vector which lays out which of the (p + 1)(p + 2)/2
+nodes are along each of the three side and the order in which they come in.
+
+**********************************************************************************/
 void nurb::create_side_nodes()
 {
 	vector<int>node_side1(degree + 1);
@@ -57,6 +66,20 @@ void nurb::create_side_nodes()
 	node_side_index.push_back(node_side2);
 	node_side_index.push_back(node_side3);
 }
+
+/**********************************************************************************
+Function prototype:
+void nurb::organize_boundary()
+
+Function description:
+This function finds all of the nodes that live on the boundary of the mesh and 
+stores their index within bNodes.  This function also finds all of the triangles
+which have a side on the boundary and then store corresponding information within
+the variable tri_NURB_elem_section_side.  The section part of this variable takes
+into account that sometime gmsh will have a triangle side end in the middle of a
+Bezier element.
+
+**********************************************************************************/
 
 void nurb::organize_boundary()
 {
@@ -184,6 +207,16 @@ void nurb::organize_boundary()
 	}
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::operator()(int i, int j)
+
+Function description:
+This is a sorting algorithm which is used by vector.sort() to rearrange
+tri_NURB_elem_section_side so that it goes in increasing order of NURBS curve, and then
+bezier element, and then section.
+
+**********************************************************************************/
 bool nurb::operator()(int i, int j)
 {
 	vector<unsigned int> input2 = tri_NURB_elem_section_side[j];
@@ -231,6 +264,17 @@ bool nurb::operator()(int i, int j)
 	}
 }
 
+
+/**********************************************************************************
+Function prototype:
+void nurb::split_and_extract()
+
+Function description:
+This function identifies where gmsh has caused the sides triangular element to not
+span all the way across a Bezier element, determine the xi value at which this occurs,
+and then split the boundary NURBS curve at this same location as to mimic the linear mesh
+
+**********************************************************************************/
 void nurb::split_and_extract()
 {
 	// I will need to do this for each of the elements within each of the boundary curves
@@ -282,6 +326,15 @@ void nurb::split_and_extract()
 
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::determine_elem_split(int cur_nurb, int cur_elem)
+
+Function description:
+This function is the helper function to split_and_extract and is the work horse that
+determine the xi value(s) at which to split the Bezier element.
+
+**********************************************************************************/
 vector<double> nurb::determine_elem_split(int cur_nurb, int cur_elem)
 {
 	// tri_NURB_elem_section_side is already organized so that first everything is of the same curve, then the same element, then increasing section position
@@ -310,6 +363,15 @@ vector<double> nurb::determine_elem_split(int cur_nurb, int cur_elem)
 	split_list.pop_back();
 	return split_list;
 }
+
+/**********************************************************************************
+Function prototype:
+void nurb::curve_refine(Bezier_handle * Bez, int cur_elem, vector<double> xi_to_add, bool part1)
+
+Function description:
+This function handles the Bezier curve refine of the specified element and xi values.
+
+**********************************************************************************/
 
 void nurb::curve_refine(Bezier_handle * Bez, int cur_elem, vector<double> xi_to_add, bool part1)
 {
@@ -479,6 +541,17 @@ void nurb::curve_refine(Bezier_handle * Bez, int cur_elem, vector<double> xi_to_
 
 }
 
+
+/**********************************************************************************
+Function prototype:
+void nurb::elevate_degree(Bezier_handle * Bez, int element)
+
+Function description:
+This function update the control points of the NURBS curve elements and changes the
+variable inside the struct denoting the degree once all element in the curve are of
+the same elevated degree.
+
+**********************************************************************************/
 void nurb::elevate_degree(Bezier_handle * Bez, int element)
 {
 	vector<vector<double>> P = Bez->elem_Geom[element].controlP;
@@ -506,6 +579,18 @@ void nurb::elevate_degree(Bezier_handle * Bez, int element)
 
 }
 
+
+/**********************************************************************************
+Function prototype:
+void nurb::determine_dirichlet()
+
+Function description:
+This function goes through tri_NURB_elem_section_side and determines the difference
+between these true locations and those of the boundary nodes in the current linear
+mesh.  This is then used as the dirichlet condition when solving the 2D linear
+elasticity problem.
+
+**********************************************************************************/
 vector<vector<double>> nurb::determine_dirichlet()
 {
 	vector<vector<double>> g(node_list.size(), vector<double>(3, 0));
@@ -588,6 +673,15 @@ vector<vector<double>> nurb::determine_dirichlet()
 	return g;
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::newton_find_xi(int cur_nurb, int cur_elem, vector<double> second_point, double guess)
+
+Function description:
+This function is a helper function for determine_elem_split.  It's job is to use 
+Newton's method to determine the value of the intersecting xi equations.
+
+**********************************************************************************/
 double nurb::newton_find_xi(int cur_nurb, int cur_elem, vector<double> second_point, double guess)
 {
 	double tol = 0.0000001;
@@ -646,6 +740,14 @@ double nurb::newton_find_xi(int cur_nurb, int cur_elem, vector<double> second_po
 	return guess;
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::n_choose_k(int n, int k)
+
+Function description:
+This function evaluates the n choose k notation of variables n and k.
+
+**********************************************************************************/
 double nurb::n_choose_k(int n, int k)
 {
 	double ans;
@@ -667,6 +769,16 @@ void nurb::smooth_weights(int degree)
 
 }
 
+
+/**********************************************************************************
+Function prototype:
+void nurb::solve_laplacian(vector<vector<double>> g)
+
+Function description:
+This function solves the laplacian problem in order to smooth the weights around the mesh.
+It then update the variable node_list to save these changes
+
+**********************************************************************************/
 void nurb::solve_laplacian(vector<vector<double>> g)
 {
 	// Declare the Global K and F matrices
@@ -785,25 +897,16 @@ void nurb::solve_laplacian(vector<vector<double>> g)
 	}
 }
 
-vector<double> nurb::eval_Bez_elem(double xi_val, unsigned int element, unsigned int cur_nurb)
-{
-	vector <double> num(2, 0);
-	double denom = 0;
-	Bezier_handle *Bez = Elem_list[cur_nurb];
-	for (int k = 0; k < Bez->p + 1; k++) {            // Loop through all of the control points in that element.  There are p + 1 of them
-													  // first I need to evaluate the basis functions at the temp_len
-		double N = (fast_fact[Bez->p] / (fast_fact[k] * fast_fact[Bez->p - k]))*pow(xi_val, (k)) * pow((1 - xi_val), (Bez->p - k));
-		num[0] += N * Bez->elem_Geom[element].controlP[k][0] * Bez->elem_Geom[element].weight[k];
-		num[1] += N * Bez->elem_Geom[element].controlP[k][1] * Bez->elem_Geom[element].weight[k];
-		denom += N * Bez->elem_Geom[element].weight[k];
-	}
-	num[0] = num[0] / denom;
-	num[1] = num[1] / denom;
 
+/**********************************************************************************
+Function prototype:
+void nurb::LE2D(vector<vector<double>> g)
 
-	return num;
-}
+Function description:
+This function solves the 2D linear elasticity problem to snap the boundary to where
+it should be as well as smooth out all of the internal nodes
 
+**********************************************************************************/
 void nurb::LE2D(vector<vector<double>> g)
 {
 	// define the stiffness properties
@@ -947,6 +1050,16 @@ void nurb::LE2D(vector<vector<double>> g)
 	//}
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::evaluate_tri_basis(int q_point)
+
+Function description:
+This function evaluate the triangular basis functions at the predetermined quadrature
+points.  This function is only called once since all triangles can use this same
+set of cononical basis functions.
+
+**********************************************************************************/
 void nurb::evaluate_tri_basis(int q_points)
 {
 	int n = degree;
@@ -1045,6 +1158,17 @@ void nurb::evaluate_tri_basis(int q_points)
 	}
 }
 
+/**********************************************************************************
+Function prototype:
+tri_10_output nurb::tri_10_fast(unsigned int tri, int q, bool rational)
+
+Function description:
+This function determines the location specific parametic space derivatives, 
+physical space derivatives, and the jacobian mapping between the two.
+This is equvialent shape function for triangles.
+
+**********************************************************************************/
+
 tri_10_output nurb::tri_10_fast(unsigned int tri, int q, bool rational)
 {
 	unsigned int nen = int(tri_N[0].size());
@@ -1136,7 +1260,16 @@ tri_10_output nurb::tri_10_fast(unsigned int tri, int q, bool rational)
 	return output;
 }
 
-MatrixXd nurb::create_matrix(std::vector<std::vector<double>> input)
+/**********************************************************************************
+Function prototype:
+MatrixXd nurb::create_matrix(vector<vector<double>> input
+
+Function description:
+This function converts a 2D vector into a MatrixXd data type so that it can be
+used in matrix multiplication.
+
+**********************************************************************************/
+MatrixXd nurb::create_matrix(vector<vector<double>> input)
 {
 	unsigned int first = int(input.size());
 	unsigned int second = int(input[0].size());

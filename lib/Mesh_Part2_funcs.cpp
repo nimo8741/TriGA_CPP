@@ -657,6 +657,16 @@ void nurb::readMsh(std::string filename, int msh_degree)
 
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::get_bary(int string)
+
+Function description:
+This function creates the triangular barycentric coordinate template to be used in
+the degree elevation of the linear mesh.
+
+**********************************************************************************/
+
 void nurb::get_bary(int degree)
 {
 	bary_template.resize(nodes_in_triangle);
@@ -693,6 +703,37 @@ void nurb::get_bary(int degree)
 		}
 	}
 }
+
+/**********************************************************************************
+Function prototype:
+void nurb::ij_to_index(int i, int j, int degree, vector<double> bary)
+
+Function description:
+This function takes barycentric index i and j, the desired mesh degree and barycentric
+coordinate and converts that into the absolute node index for the triangle.  For
+arbitrary degree there are (p + 1)(p + 2)/2 nodes.
+
+The ordering scheme is shown below and spirals in recursively.  Note the below diagram 
+does not take into account the way that c++ indexes, ie starting at 0.
+
+3
+| \
+|    \
+|       \
+2p+2       2p + 1
+|             \
+|                \
+|        3p+3       \
+|                      \
+|                         \
+|                            \
+|                                \
+3p      3p+1            3p+2         p + 3
+|                                        \
+|                                            \
+1-------4-----------------------p + 2 ----------2
+
+**********************************************************************************/
 
 int nurb::ij_to_index(int i, int j, int degree, vector<double> bary)
 {

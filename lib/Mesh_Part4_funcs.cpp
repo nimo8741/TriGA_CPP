@@ -10,6 +10,14 @@
 
 using namespace std;
 
+/**********************************************************************************
+Function prototype:
+void nurb::create_xmsh(string filename, int degree)
+
+Function description:
+This function generates the output xmsh file.
+
+**********************************************************************************/
 void nurb::create_xmsh(string filename, int degree)
 {
 	ofstream xmsh_file;
@@ -68,6 +76,15 @@ void nurb::create_xmsh(string filename, int degree)
 	xmsh_file.close();
 }
 
+/**********************************************************************************
+Function prototype:
+void nurb::display_mesh(string filename)
+
+Function description:
+This function uses gnuplot to display the resulting mesh with control points and
+the evaluated NURBS curve edges.
+
+**********************************************************************************/
 void nurb::display_mesh(string filename)
 {
 	ofstream control_file;
@@ -161,7 +178,7 @@ void nurb::display_mesh(string filename)
         	// now I need to rewrite the plot_cmds.plot
         plot_file.open(path_to_file + "/plot_cmds.plot");
         plot_file << "cd '" + path_to_file + "IO_files/dat_files'" << endl;
-        plot_file << "set size square" << endl << "plot 'control.dat' with points linecolor rgb 'blue' pointtype 5 ps 0.5 notitle, \\" << endl;
+        plot_file << "set size square" << endl << "plot 'control.dat' with points linecolor rgb 'blue' pointtype 5 ps 0.2 notitle, \\" << endl;
         plot_file << "     'edges.dat' with lines linecolor rgb 'red' lw 0.5 notitle" << endl << "set size square" << endl << "pause -1 \"Hit return to continue\"";
         plot_file.close();
 
@@ -183,20 +200,16 @@ void nurb::display_mesh(string filename)
 
 }
 
-double** nurb::vec_to_array(vector<vector<double>> &vec, unsigned int rows)
-{
-	double** temp;
-	temp = new double*[2];
-	temp[0] = new double[rows];
-	temp[1] = new double[rows];
-	for (unsigned int i = 0; i < rows; i++) {
-		temp[0][i] = vec[i][0];
-		temp[1][i] = vec[i][1];
+/**********************************************************************************
+Function prototype:
+vector<vector<double>> nurb::eval_edges(vector<vector<double>> N, int edge)
 
-	}
-	return temp;
-}
+Function description:
+This function evaluates the NURBS curve that is each global edge within the domain
+and produces a list of 10 points which can reasonably mimic the actual curve when
+connected with a straight line.
 
+**********************************************************************************/
 vector<vector<double>> nurb::eval_edges(vector<vector<double>> N, int edge)
 {
 	// First I need to figure out the weight to determine the rational basis function evaluations
